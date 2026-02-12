@@ -20,8 +20,12 @@ const COLORS = [
 ];
 
 export function ProviderBreakdown({ data, title = "By Provider" }: ProviderBreakdownProps) {
-  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
-  const total = entries.reduce((sum, [, value]) => sum + value, 0);
+  // Guard against null/undefined data
+  const safeData = data ?? {};
+  const entries = Object.entries(safeData)
+    .filter(([, v]) => v != null && typeof v === 'number')
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
+  const total = entries.reduce((sum, [, value]) => sum + (value ?? 0), 0);
 
   if (entries.length === 0) {
     return (
@@ -47,14 +51,14 @@ export function ProviderBreakdown({ data, title = "By Provider" }: ProviderBreak
         {/* Bar chart */}
         <div className="flex h-8 rounded-lg overflow-hidden bg-zinc-800">
           {entries.map(([name, value], index) => {
-            const percentage = total > 0 ? (value / total) * 100 : 0;
+            const percentage = total > 0 ? ((value ?? 0) / total) * 100 : 0;
             if (percentage < 1) return null;
             return (
               <div
                 key={name}
                 className={cn(COLORS[index % COLORS.length], "transition-all")}
                 style={{ width: `${percentage}%` }}
-                title={`${name}: $${value.toFixed(2)} (${percentage.toFixed(1)}%)`}
+                title={`${name}: $${(value ?? 0).toFixed(2)} (${(percentage ?? 0).toFixed(1)}%)`}
               />
             );
           })}
@@ -63,7 +67,7 @@ export function ProviderBreakdown({ data, title = "By Provider" }: ProviderBreak
         {/* Legend */}
         <div className="space-y-2">
           {entries.map(([name, value], index) => {
-            const percentage = total > 0 ? (value / total) * 100 : 0;
+            const percentage = total > 0 ? ((value ?? 0) / total) * 100 : 0;
             return (
               <div key={name} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -74,10 +78,10 @@ export function ProviderBreakdown({ data, title = "By Provider" }: ProviderBreak
                 </div>
                 <div className="text-sm">
                   <span className="text-zinc-100 font-medium">
-                    ${value.toFixed(2)}
+                    ${(value ?? 0).toFixed(2)}
                   </span>
                   <span className="text-zinc-500 ml-2">
-                    ({percentage.toFixed(1)}%)
+                    ({(percentage ?? 0).toFixed(1)}%)
                   </span>
                 </div>
               </div>
