@@ -34,6 +34,11 @@ const statusConfig = {
     textColor: "text-zinc-400",
     label: "Idle",
   },
+  waiting: {
+    color: "bg-yellow-500",
+    textColor: "text-yellow-400",
+    label: "Waiting",
+  },
   error: {
     color: "bg-red-500",
     textColor: "text-red-400",
@@ -69,9 +74,7 @@ export function AgentCard({ agent }: AgentCardProps) {
   const [expanded, setExpanded] = useState(false);
   const status = statusConfig[agent.status];
 
-  const contextPercentage = agent.activeSession
-    ? Math.round(Math.random() * 100) // TODO: Get actual context usage
-    : 0;
+  const contextPercentage = Math.round(agent.contextUsagePercent || 0);
 
   return (
     <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
@@ -110,6 +113,24 @@ export function AgentCard({ agent }: AgentCardProps) {
       </CardHeader>
 
       <CardContent className="space-y-3">
+        {/* Waiting Status Badges */}
+        {agent.status === "waiting" && (
+          <div className="flex flex-wrap gap-2">
+            {agent.tokenLimited && (
+              <Badge variant="outline" className="text-xs bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                <AlertCircle className="w-3 h-3 mr-1" />
+                Token Limited
+              </Badge>
+            )}
+            {agent.rateLimited && (
+              <Badge variant="outline" className="text-xs bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                <AlertCircle className="w-3 h-3 mr-1" />
+                Rate Limited
+              </Badge>
+            )}
+          </div>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div className="flex items-center gap-2 text-zinc-400">
@@ -128,8 +149,19 @@ export function AgentCard({ agent }: AgentCardProps) {
           </div>
         </div>
 
+        {/* Active Sessions */}
+        {(agent.activeSessions || 0) > 0 && (
+          <div className="flex items-center justify-between text-sm py-1">
+            <span className="text-zinc-500 flex items-center gap-1">
+              <MessageSquare className="w-3 h-3" />
+              Active Sessions
+            </span>
+            <span className="text-zinc-300 font-medium">{agent.activeSessions}</span>
+          </div>
+        )}
+
         {/* Context Usage */}
-        {agent.activeSession && (
+        {contextPercentage > 0 && (
           <div className="space-y-1">
             <div className="flex justify-between text-xs">
               <span className="text-zinc-500">Context Usage</span>

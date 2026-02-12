@@ -2,7 +2,7 @@
 
 // ===== Agent Types =====
 
-export type AgentStatus = 'active' | 'idle' | 'error';
+export type AgentStatus = 'active' | 'idle' | 'waiting' | 'error';
 
 export interface Agent {
   id: string;
@@ -13,6 +13,10 @@ export interface Agent {
   activeSession: string | null;
   heartbeatNext: string | null;
   heartbeatOverdue: boolean;
+  activeSessions?: number;
+  tokenLimited?: boolean;
+  rateLimited?: boolean;
+  contextUsagePercent?: number;
 }
 
 // ===== Session Types =====
