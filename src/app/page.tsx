@@ -104,6 +104,8 @@ export default function Dashboard() {
       ]);
       
       if (agentsResult) {
+        console.log("First agent sample:", JSON.stringify(agentsResult.agents?.[0], null, 2));
+        
         // Transform agents response to expected format
         const agents: AgentInfo[] = (agentsResult.agents || []).map((agent: any) => ({
           id: agent.id,
