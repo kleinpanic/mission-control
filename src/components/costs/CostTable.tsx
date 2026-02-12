@@ -91,7 +91,7 @@ export function CostTable({ data }: CostTableProps) {
                     {entry.output_tokens.toLocaleString()}
                   </TableCell>
                   <TableCell className="text-zinc-100 text-right font-medium">
-                    ${entry.total_cost.toFixed(4)}
+                    ${(entry.total_cost ?? 0).toFixed(4)}
                   </TableCell>
                 </TableRow>
               ))}
