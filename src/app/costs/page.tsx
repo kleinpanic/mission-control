@@ -72,6 +72,8 @@ export default function CostsPage() {
       ]);
 
       if (costResult) {
+        console.log('[Costs] usage.cost response:', costResult);
+        
         // Transform the response to expected format
         setData({
           summary: {
@@ -85,6 +87,14 @@ export default function CostsPage() {
           billingAccount: costResult.billingAccount || costResult.account,
           providers: costResult.providers || extractProviders(costResult),
         });
+        
+        console.log('[Costs] Transformed data:', {
+          today: costResult.today ?? costResult.summary?.today ?? 0,
+          week: costResult.week ?? costResult.summary?.week ?? 0,
+          month: costResult.month ?? costResult.summary?.month ?? 0,
+        });
+      } else {
+        console.warn('[Costs] usage.cost returned no data');
       }
 
       if (historyResult) {
@@ -246,6 +256,16 @@ export default function CostsPage() {
       )}
 
       {/* Overview Cards */}
+      {summary.today === 0 && summary.week === 0 && summary.month === 0 && (
+        <Card className="bg-yellow-900/20 border-yellow-800">
+          <CardContent className="p-4">
+            <p className="text-yellow-400 text-sm">
+              ℹ️ No cost data available yet. Cost tracking requires OpenClaw usage data. 
+              Check the gateway logs or run <code className="bg-zinc-800 px-1 rounded">codexbar cost</code> to verify usage tracking.
+            </p>
+          </CardContent>
+        </Card>
+      )}
       <CostOverview
         today={summary.today}
         week={summary.week}
