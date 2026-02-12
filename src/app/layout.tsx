@@ -4,6 +4,7 @@ import './globals.css';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Header } from '@/components/dashboard/Header';
 import { Toaster } from '@/components/ui/sonner';
+import { ThemeProvider } from '@/components/providers/ThemeProvider';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -26,18 +27,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <div className="flex h-screen bg-background">
-          <Sidebar />
-          <div className="flex flex-col flex-1 overflow-hidden">
-            <Header />
-            <main className="flex-1 overflow-y-auto p-6">
-              {children}
-            </main>
+        <ThemeProvider>
+          <div className="flex h-screen bg-background">
+            <Sidebar />
+            <div className="flex flex-col flex-1 overflow-hidden">
+              <Header />
+              <main className="flex-1 overflow-y-auto p-6">
+                {children}
+              </main>
+            </div>
           </div>
-        </div>
-        <Toaster />
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
