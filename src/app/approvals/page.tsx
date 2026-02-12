@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ApprovalCard, ApprovalRequest } from "@/components/approvals/ApprovalCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,7 @@ export default function ApprovalsPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
 
-  const fetchApprovals = async () => {
+  const fetchApprovals = useCallback(async () => {
     setLoading(true);
     try {
       const [approvalsRes, statsRes] = await Promise.all([
@@ -46,13 +46,13 @@ export default function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchApprovals();
     const interval = setInterval(fetchApprovals, 30000); // Refresh every 30s
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchApprovals]);
 
   const handleApprove = async (id: string, notes?: string) => {
     try {

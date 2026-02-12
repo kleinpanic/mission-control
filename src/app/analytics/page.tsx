@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -83,7 +83,7 @@ export default function AnalyticsPage() {
     )
   ).sort();
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [logsRes, auditRes, activityRes, debugRes] = await Promise.all([
@@ -109,13 +109,13 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 30000); // Refresh every 30s
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchData]);
 
   let filteredLogs = logs;
   

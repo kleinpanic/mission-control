@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { CronJob } from "@/types";
 import { CronTable } from "@/components/cron/CronTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,7 @@ export default function CronPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCronJobs = async () => {
+  const fetchCronJobs = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -27,14 +27,14 @@ export default function CronPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchCronJobs();
     // Refresh every minute
     const interval = setInterval(fetchCronJobs, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchCronJobs]);
 
   const handleRunNow = async (jobId: string) => {
     try {
