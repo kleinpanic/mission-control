@@ -103,21 +103,58 @@ export default function Dashboard() {
         request<any>("cron.list").catch(e => { console.error("cron.list error:", e); return null; }),
       ]);
       
-      if (agentsResult) {
-        console.log("First agent sample:", JSON.stringify(agentsResult.agents?.[0], null, 2));
+      if (agentsResult && statusResult) {
+        // Build a map of agent sessions from status
+        const sessionsByAgent = new Map<string, any[]>();
+        const heartbeatByAgent = new Map<string, any>();
         
-        // Transform agents response to expected format
-        const agents: AgentInfo[] = (agentsResult.agents || []).map((agent: any) => ({
-          id: agent.id,
-          name: agent.name || agent.id,
-          enabled: agent.enabled ?? true,
-          status: agent.status || "idle",
-          model: agent.model || agent.defaultModel,
-          heartbeatInterval: agent.heartbeatInterval || "~15m",
-          lastActivity: agent.lastActivity,
-          lastActivityAge: agent.lastActivityAge || formatAge(agent.lastActivity),
-          activeSessions: agent.activeSessions || 0,
-          maxSessionPercent: agent.maxSessionPercent || 0,
+        // Map sessions by agent
+        statusResult.sessions?.byAgent?.forEach((agentSessions: any) => {
+          sessionsByAgent.set(agentSessions.agentId, agentSessions.recent || []);
+        });
+        
+        // Map heartbeat info by agent
+        statusResult.heartbeat?.agents?.forEach((hb: any) => {
+          heartbeatByAgent.set(hb.agentId, hb);
+        });
+        
+        // Transform agents response to expected format, enriching with session data
+        const agents: AgentInfo[] = (agentsResult.agents || []).map((agent: any) => {
+          const sessions = sessionsByAgent.get(agent.id) || [];
+          const heartbeat = heartbeatByAgent.get(agent.id);
+          
+          // Find most recent activity across all sessions for this agent
+          const mostRecentSession = sessions.reduce((latest: any, session: any) => {
+            if (!latest) return session;
+            const latestTime = latest.updatedAt || 0;
+            const sessionTime = session.updatedAt || 0;
+            return sessionTime > latestTime ? session : latest;
+          }, null);
+          
+          const lastActivityMs = mostRecentSession?.updatedAt;
+          const lastActivity = lastActivityMs ? new Date(lastActivityMs).toISOString() : null;
+          
+          // Determine status based on session activity
+          const activeSessions = sessions.length;
+          const recentActivity = lastActivityMs && (Date.now() - lastActivityMs < 5 * 60 * 1000); // active if < 5min ago
+          const hasWaiting = sessions.some((s: any) => s.percentUsed >= 95);
+          
+          let status: "active" | "idle" | "waiting" | "error" = "idle";
+          if (hasWaiting) status = "waiting";
+          else if (recentActivity) status = "active";
+          
+          return {
+            id: agent.id,
+            name: agent.name || agent.id,
+            enabled: heartbeat?.enabled ?? true,
+            status,
+            model: mostRecentSession?.model || null,
+            heartbeatInterval: heartbeat?.every || "—",
+            lastActivity,
+            lastActivityAge: formatAge(lastActivity),
+            activeSessions,
+            maxSessionPercent: Math.max(...sessions.map((s: any) => s.percentUsed || 0), 0),
+          };
         }));
 
         setStatus({
