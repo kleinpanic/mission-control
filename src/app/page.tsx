@@ -96,15 +96,16 @@ export default function Dashboard() {
     setLoading(true);
     try {
       // Fetch all data in parallel via WebSocket
-      const [statusResult, costsResult, cronResult] = await Promise.all([
+      const [agentsResult, statusResult, costsResult, cronResult] = await Promise.all([
+        request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
         request<any>("status").catch(e => { console.error("status error:", e); return null; }),
         request<any>("usage.cost").catch(e => { console.error("usage.cost error:", e); return null; }),
         request<any>("cron.list").catch(e => { console.error("cron.list error:", e); return null; }),
       ]);
-
-      if (statusResult) {
-        // Transform status response to expected format
-        const agents: AgentInfo[] = (statusResult.agents || []).map((agent: any) => ({
+      
+      if (agentsResult) {
+        // Transform agents response to expected format
+        const agents: AgentInfo[] = (agentsResult.agents || []).map((agent: any) => ({
           id: agent.id,
           name: agent.name || agent.id,
           enabled: agent.enabled ?? true,
@@ -120,21 +121,21 @@ export default function Dashboard() {
         setStatus({
           gateway: {
             status: "connected",
-            url: statusResult.gateway?.url || "ws://127.0.0.1:18789",
-            uptime: statusResult.gateway?.uptime,
-            version: statusResult.gateway?.version,
+            url: "ws://127.0.0.1:18789",
+            uptime: undefined,
+            version: undefined,
           },
           agents,
           sessions: {
-            total: statusResult.sessions?.total || statusResult.activeSessions || 0,
-            atCapacity: statusResult.sessions?.atCapacity || 0,
+            total: statusResult?.sessions?.length || 0,
+            atCapacity: 0,
           },
           heartbeat: {
-            defaultAgentId: statusResult.heartbeat?.defaultAgentId || "main",
-            nextHeartbeats: statusResult.heartbeat?.nextHeartbeats || [],
+            defaultAgentId: statusResult?.heartbeat?.defaultAgentId || agentsResult?.defaultId || "main",
+            nextHeartbeats: statusResult?.heartbeat?.next || [],
           },
-          channels: statusResult.channels || [],
-          health: statusResult.health,
+          channels: statusResult?.channelSummary?.channels?.map((c: any) => c.id) || [],
+          health: { status: "ok" },
         });
       }
 

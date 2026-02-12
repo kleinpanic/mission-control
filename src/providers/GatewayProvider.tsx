@@ -61,7 +61,7 @@ export function GatewayProvider({ children }: Props) {
             },
             role: "operator",
             scopes: ["operator.read", "operator.write"],
-            auth: { token: process.env.NEXT_PUBLIC_GATEWAY_TOKEN || "" }
+            auth: { token: process.env.NEXT_PUBLIC_OPENCLAW_GATEWAY_TOKEN || "" }
           }
         }));
         return;
