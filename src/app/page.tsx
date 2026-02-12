@@ -96,7 +96,7 @@ export default function Dashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${todayCost.toFixed(2)}</div>
+            <div className="text-2xl font-bold">${(todayCost ?? 0).toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">Total spending</p>
           </CardContent>
         </Card>

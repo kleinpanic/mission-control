@@ -129,7 +129,7 @@ export function SessionDetail({ session, onClose }: SessionDetailProps) {
         {session.cost && (
           <div className="flex justify-between text-sm">
             <span className="text-zinc-400">Session Cost</span>
-            <span className="text-zinc-100">${session.cost.total.toFixed(4)}</span>
+            <span className="text-zinc-100">${(session.cost?.total ?? 0).toFixed(4)}</span>
           </div>
         )}
 
