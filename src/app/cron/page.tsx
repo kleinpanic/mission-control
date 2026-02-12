@@ -17,14 +17,10 @@ export default function CronPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/gateway", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ method: "cron.list", params: { includeDisabled: true } }),
-      });
+      const res = await fetch("/api/cron");
       const data = await res.json();
-      if (data.result?.jobs) {
-        setJobs(data.result.jobs);
+      if (data.jobs) {
+        setJobs(data.jobs);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch cron jobs");
@@ -42,10 +38,10 @@ export default function CronPage() {
 
   const handleRunNow = async (jobId: string) => {
     try {
-      await fetch("/api/gateway", {
+      await fetch("/api/cron", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ method: "cron.run", params: { jobId, runMode: "force" } }),
+        body: JSON.stringify({ action: "run", jobId }),
       });
       // Refresh the list
       fetchCronJobs();
