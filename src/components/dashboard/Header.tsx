@@ -1,11 +1,22 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useRealtimeStore } from '@/stores/realtime';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 export function Header() {
   const { connectionStatus } = useRealtimeStore();
+  const [currentTime, setCurrentTime] = useState<string>('');
+
+  // Update time only on client to avoid hydration mismatch
+  useEffect(() => {
+    setCurrentTime(new Date().toLocaleString());
+    const interval = setInterval(() => {
+      setCurrentTime(new Date().toLocaleString());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const statusColors = {
     connecting: 'bg-yellow-500',
@@ -32,8 +43,8 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="text-sm text-muted-foreground">
-          {new Date().toLocaleString()}
+        <span className="text-sm text-muted-foreground suppressHydrationWarning">
+          {currentTime}
         </span>
       </div>
     </header>
