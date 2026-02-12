@@ -80,6 +80,60 @@ export async function GET(request: NextRequest) {
 }
 
 function parseLogLine(line: string): LogEntry {
+  // Try to parse as JSON first (OpenClaw format)
+  try {
+    const json = JSON.parse(line);
+    
+    // OpenClaw JSON log format has:
+    // - "time": ISO timestamp
+    // - "_meta.logLevelName": DEBUG|INFO|WARN|ERROR
+    // - "_meta.path.filePathWithLine": file:line
+    // - "1": the main message (or "2" for some logs)
+    
+    const meta = json._meta || {};
+    const levelStr = (meta.logLevelName || 'INFO').toUpperCase();
+    
+    let level: LogEntry['level'] = 'info';
+    if (levelStr === 'ERROR') level = 'error';
+    else if (levelStr === 'WARN' || levelStr === 'WARNING') level = 'warning';
+    else if (levelStr === 'INFO') level = 'info';
+    else if (levelStr === 'DEBUG') level = 'debug';
+
+    // Extract message - can be in "1" or "2" field
+    let message = json['1'] || json['2'] || '';
+    if (typeof message === 'object') {
+      message = JSON.stringify(message);
+    }
+    
+    // Add subsystem context if available
+    const subsystem = json['0'];
+    if (subsystem && typeof subsystem === 'string') {
+      try {
+        const sub = JSON.parse(subsystem);
+        if (sub.subsystem) {
+          message = `[${sub.subsystem}] ${message}`;
+        } else if (sub.module) {
+          message = `[${sub.module}] ${message}`;
+        }
+      } catch {
+        // subsystem is not JSON, use as-is
+      }
+    }
+
+    const filePath = meta.path?.filePathWithLine || meta.path?.filePath;
+    const lineNum = meta.path?.fileLine ? parseInt(meta.path.fileLine) : undefined;
+
+    return {
+      timestamp: json.time || meta.date || new Date().toISOString(),
+      level,
+      message: message || line,
+      file: filePath,
+      line: lineNum,
+    };
+  } catch {
+    // Fall back to plain text parsing
+  }
+
   // Parse common log formats
   // Example: [2024-02-12 02:45:32] ERROR: Something went wrong
   const timestampMatch = line.match(/\[([^\]]+)\]/);
