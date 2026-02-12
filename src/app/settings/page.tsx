@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Settings, Server, Database, Moon, Sun, Monitor, Bot, Cpu, RefreshCw, Save } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
+import { useGateway } from "@/providers/GatewayProvider";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -42,6 +43,7 @@ const AVAILABLE_MODELS = [
 
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const { connected, request } = useGateway();
   const [config, setConfig] = useState<GatewayConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -89,13 +91,49 @@ export default function SettingsPage() {
   };
 
   const handleSaveAgentModel = async (agentId: string) => {
+    if (!connected) {
+      toast.error('Not connected to gateway');
+      return;
+    }
+    
     setSaving(true);
     try {
-      // This would need to be implemented in the gateway API
-      // For now, show info about how to change models
-      toast.info(`Model override for ${agentId}: Use /model ${modelOverrides[agentId]} in chat`, {
-        description: "Per-agent config requires gateway restart",
+      const model = modelOverrides[agentId];
+      
+      // Fetch current config via WebSocket
+      const currentConfig = await request<any>('config.get');
+      
+      // Update the agent's model in the config
+      const updatedConfig = { ...currentConfig };
+      if (!updatedConfig.agents) updatedConfig.agents = {};
+      if (!updatedConfig.agents.list) updatedConfig.agents.list = [];
+      
+      const agentIndex = updatedConfig.agents.list.findIndex((a: any) => a.id === agentId);
+      if (agentIndex >= 0) {
+        updatedConfig.agents.list[agentIndex] = {
+          ...updatedConfig.agents.list[agentIndex],
+          model: model === 'default' ? null : model,
+        };
+      } else {
+        // Agent not in config, add it
+        updatedConfig.agents.list.push({
+          id: agentId,
+          model: model === 'default' ? null : model,
+        });
+      }
+      
+      // Send patch request via WebSocket
+      await request<any>('config.patch', {
+        baseHash: currentConfig.baseHash,
+        raw: JSON.stringify(updatedConfig, null, 2),
       });
+      
+      toast.success(`Model updated for ${agentId}`, {
+        description: `Set to ${model === 'default' ? 'default model' : model}. Gateway will restart.`,
+      });
+    } catch (error) {
+      console.error('Failed to save model:', error);
+      toast.error('Failed to save model configuration');
     } finally {
       setSaving(false);
     }
