@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# mission control data
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Mission Control specific
+data/*.db
+data/*.db-*
+.env.local
+.env*.local
