@@ -51,22 +51,38 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function fetchConfig() {
+      if (!connected) return;
+      
       try {
-        const res = await fetch("/api/status");
-        if (res.ok) {
-          const data = await res.json();
-          const agents = data.agents || [];
+        const [agentsResult, statusResult] = await Promise.all([
+          request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
+          request<any>("status").catch(e => { console.error("status error:", e); return null; }),
+        ]);
+        
+        if (agentsResult && statusResult) {
+          const agents = agentsResult.agents || [];
+          
+          // Map heartbeat info
+          const heartbeatByAgent = new Map<string, any>();
+          statusResult.heartbeat?.agents?.forEach((hb: any) => {
+            heartbeatByAgent.set(hb.agentId, hb);
+          });
+          
           setConfig({
             defaultModel: "gpt-5.2",
             contextTokens: 200000,
-            agents: agents.map((a: any) => ({
-              id: a.id,
-              name: a.name,
-              model: a.model,
-              heartbeatInterval: a.heartbeatInterval,
-            })),
-            channels: data.channels || [],
+            agents: agents.map((a: any) => {
+              const heartbeat = heartbeatByAgent.get(a.id);
+              return {
+                id: a.id,
+                name: a.name,
+                model: a.model,
+                heartbeatInterval: heartbeat?.every || "—",
+              };
+            }),
+            channels: statusResult.channelSummary?.channels?.map((c: any) => c.id) || [],
           });
+          
           // Initialize model overrides from current agent models
           const overrides: Record<string, string> = {};
           agents.forEach((a: any) => {
@@ -81,7 +97,7 @@ export default function SettingsPage() {
       }
     }
     fetchConfig();
-  }, []);
+  }, [connected, request]);
 
   const handleModelChange = (agentId: string, model: string) => {
     setModelOverrides((prev) => ({
