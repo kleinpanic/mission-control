@@ -85,10 +85,10 @@ export function CostTable({ data }: CostTableProps) {
                     {entry.model}
                   </TableCell>
                   <TableCell className="text-zinc-400 text-right">
-                    {entry.input_tokens.toLocaleString()}
+                    {(entry.input_tokens ?? 0).toLocaleString()}
                   </TableCell>
                   <TableCell className="text-zinc-400 text-right">
-                    {entry.output_tokens.toLocaleString()}
+                    {(entry.output_tokens ?? 0).toLocaleString()}
                   </TableCell>
                   <TableCell className="text-zinc-100 text-right font-medium">
                     ${(entry.total_cost ?? 0).toFixed(4)}
