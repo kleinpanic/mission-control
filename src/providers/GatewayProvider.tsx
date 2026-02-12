@@ -37,6 +37,10 @@ export function GatewayProvider({ children }: Props) {
   const maxReconnectAttempts = 15;
   const isConnecting = useRef(false);
   
+  // Cache for frequently requested data (30 second TTL)
+  const cacheRef = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
+  const CACHE_TTL_MS = 30000; // 30 seconds
+  
   const { setConnectionStatus, addEvent } = useRealtimeStore();
 
   const handleMessage = useCallback((data: string) => {
@@ -190,6 +194,9 @@ export function GatewayProvider({ children }: Props) {
         });
         pendingRef.current.clear();
         
+        // Clear cache on disconnect
+        cacheRef.current.clear();
+        
         // Auto-reconnect with exponential backoff
         if (reconnectAttempts.current < maxReconnectAttempts) {
           const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts.current), 30000);
@@ -208,11 +215,24 @@ export function GatewayProvider({ children }: Props) {
     }
   }, [handleMessage, setConnectionStatus]);
 
-  const request = useCallback(<T = any>(method: string, params: Record<string, any> = {}): Promise<T> => {
+  const request = useCallback(<T = any>(method: string, params: Record<string, any> = {}, useCache: boolean = true): Promise<T> => {
     return new Promise((resolve, reject) => {
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !connected) {
         reject(new Error("Not connected to gateway"));
         return;
+      }
+      
+      // Check cache for cacheable methods (status, agents.list)
+      const cacheKey = `${method}:${JSON.stringify(params)}`;
+      const cacheable = useCache && (method === "status" || method === "agents.list" || method === "usage.cost");
+      
+      if (cacheable) {
+        const cached = cacheRef.current.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+          console.log(`[Gateway] Cache hit for ${method}`);
+          resolve(cached.data);
+          return;
+        }
       }
       
       const id = crypto.randomUUID();
@@ -225,7 +245,17 @@ export function GatewayProvider({ children }: Props) {
         }
       }, 30000);
       
-      pendingRef.current.set(id, { resolve, reject, timer });
+      pendingRef.current.set(id, { 
+        resolve: (data: T) => {
+          // Cache the result if cacheable
+          if (cacheable) {
+            cacheRef.current.set(cacheKey, { data, timestamp: Date.now() });
+          }
+          resolve(data);
+        }, 
+        reject, 
+        timer 
+      });
       
       const message = JSON.stringify({
         type: "req",
