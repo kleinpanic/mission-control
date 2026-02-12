@@ -5,15 +5,40 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-interface CodexbarCostData {
+// Codexbar actual format (from `codexbar cost --format json`)
+interface CodexbarProviderData {
+  provider: string;
+  daily: {
+    date: string;  // "2026-02-07"
+    inputTokens: number;
+    outputTokens: number;
+    totalCost: number;
+    totalTokens: number;
+    modelsUsed: string[];
+    modelBreakdowns: {
+      modelName: string;
+      cost: number;
+    }[];
+  }[];
+  totals: {
+    inputTokens: number;
+    outputTokens: number;
+    totalCost: number;
+    totalTokens: number;
+  };
+  last30DaysCostUSD: number;
+  last30DaysTokens: number;
+  updatedAt: string;
+}
+
+// Normalized format for the table
+interface NormalizedEntry {
+  timestamp: string;
   provider: string;
   model: string;
   input_tokens: number;
   output_tokens: number;
-  input_cost: number;
-  output_cost: number;
   total_cost: number;
-  timestamp: string;
 }
 
 // Cache costs for 5 minutes
@@ -40,7 +65,7 @@ export async function GET(request: NextRequest) {
       console.warn('codexbar stderr:', stderr);
     }
 
-    const data: CodexbarCostData[] = JSON.parse(stdout);
+    const providers: CodexbarProviderData[] = JSON.parse(stdout);
 
     // Aggregate costs
     const summary = {
@@ -52,37 +77,56 @@ export async function GET(request: NextRequest) {
     };
 
     const now_date = new Date();
-    const today_start = new Date(now_date.getFullYear(), now_date.getMonth(), now_date.getDate());
-    const week_start = new Date(now_date.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const month_start = new Date(now_date.getFullYear(), now_date.getMonth(), 1);
+    const todayStr = now_date.toISOString().slice(0, 10); // "2026-02-12"
+    const weekAgo = new Date(now_date.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const monthStart = `${now_date.getFullYear()}-${String(now_date.getMonth() + 1).padStart(2, '0')}-01`;
 
-    for (const entry of data) {
-      const entry_date = new Date(entry.timestamp);
-      const cost = entry.total_cost;
+    // Flatten daily entries for the table
+    const raw: NormalizedEntry[] = [];
 
-      // Time-based aggregation
-      if (entry_date >= today_start) {
-        summary.today += cost;
+    for (const provider of providers) {
+      // Provider total
+      if (!summary.byProvider[provider.provider]) {
+        summary.byProvider[provider.provider] = 0;
       }
-      if (entry_date >= week_start) {
-        summary.week += cost;
-      }
-      if (entry_date >= month_start) {
-        summary.month += cost;
-      }
+      summary.byProvider[provider.provider] += provider.totals.totalCost;
 
-      // Provider aggregation
-      if (!summary.byProvider[entry.provider]) {
-        summary.byProvider[entry.provider] = 0;
-      }
-      summary.byProvider[entry.provider] += cost;
+      for (const day of provider.daily) {
+        const dayDate = day.date; // "2026-02-07"
 
-      // Model aggregation
-      if (!summary.byModel[entry.model]) {
-        summary.byModel[entry.model] = 0;
+        // Time-based aggregation
+        if (dayDate === todayStr) {
+          summary.today += day.totalCost;
+        }
+        if (dayDate >= weekAgo) {
+          summary.week += day.totalCost;
+        }
+        if (dayDate >= monthStart) {
+          summary.month += day.totalCost;
+        }
+
+        // Model aggregation from breakdowns
+        for (const model of day.modelBreakdowns) {
+          if (!summary.byModel[model.modelName]) {
+            summary.byModel[model.modelName] = 0;
+          }
+          summary.byModel[model.modelName] += model.cost;
+
+          // Add to raw for table display
+          raw.push({
+            timestamp: `${dayDate}T00:00:00Z`,
+            provider: provider.provider,
+            model: model.modelName,
+            input_tokens: day.inputTokens,
+            output_tokens: day.outputTokens,
+            total_cost: model.cost,
+          });
+        }
       }
-      summary.byModel[entry.model] += cost;
     }
+
+    // Sort raw by date (newest first)
+    raw.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
     // Round to 2 decimal places
     summary.today = Math.round(summary.today * 100) / 100;
@@ -99,7 +143,7 @@ export async function GET(request: NextRequest) {
 
     const result = {
       summary,
-      raw: data,
+      raw,
     };
 
     // Update cache
