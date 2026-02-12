@@ -9,7 +9,9 @@ import {
   DollarSign, 
   Clock, 
   MessageSquare,
-  Activity
+  Activity,
+  BarChart3,
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +22,8 @@ const routes = [
   { name: 'Costs', href: '/costs', icon: DollarSign },
   { name: 'Cron', href: '/cron', icon: Clock },
   { name: 'Sessions', href: '/sessions', icon: MessageSquare },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 export function Sidebar() {
