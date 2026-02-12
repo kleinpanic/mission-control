@@ -1,6 +1,5 @@
 // Mission Control - Gateway API Proxy
 import { NextRequest, NextResponse } from 'next/server';
-import { getGatewayClient } from '@/lib/gateway';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,27 +13,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const client = getGatewayClient();
-    
-    // Ensure connected
-    if (!client) {
-      await client.connect();
-    }
+    // For server-side, we'll make HTTP requests to gateway instead of WebSocket
+    // This is simpler for API routes
+    const gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:18789';
+    const httpUrl = gatewayUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+    const token = process.env.OPENCLAW_GATEWAY_TOKEN || '';
 
-    const result = await client.send({
-      id: crypto.randomUUID(),
-      method,
-      params,
+    const response = await fetch(`${httpUrl}/api/v1/invoke`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ method, params }),
     });
 
-    if (result.error) {
+    if (!response.ok) {
+      const error = await response.text();
       return NextResponse.json(
-        { error: result.error.message },
-        { status: 500 }
+        { error: error || 'Gateway request failed' },
+        { status: response.status }
       );
     }
 
-    return NextResponse.json({ result: result.result });
+    const result = await response.json();
+    return NextResponse.json({ result });
   } catch (error) {
     console.error('Gateway API error:', error);
     return NextResponse.json(
