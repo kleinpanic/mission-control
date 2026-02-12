@@ -1,17 +1,36 @@
 "use client";
 
+import { useState } from "react";
 import { Session } from "@/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquare, Clock, Database } from "lucide-react";
+import { MessageSquare, Clock, Database, Trash2, RefreshCw, AlertTriangle, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface SessionTableProps {
   sessions: Session[];
   loading: boolean;
   onSelectSession: (session: Session) => void;
   selectedSessionKey?: string;
+  onRefresh?: () => void;
+}
+
+async function handleSessionAction(action: string, sessionKey: string, agentId: string): Promise<boolean> {
+  try {
+    const res = await fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, sessionKey, agentId }),
+    });
+    const data = await res.json();
+    return data.success !== false;
+  } catch (error) {
+    console.error('Session action failed:', error);
+    return false;
+  }
 }
 
 function formatRelativeTime(timestamp: string): string {
@@ -41,7 +60,28 @@ export function SessionTable({
   loading,
   onSelectSession,
   selectedSessionKey,
+  onRefresh,
 }: SessionTableProps) {
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+
+  const handlePrune = async (e: React.MouseEvent, session: Session) => {
+    e.stopPropagation();
+    const agent = getAgentFromKey(session.key);
+    setActionInProgress(session.key);
+    
+    const success = await handleSessionAction('reset', session.key, agent);
+    if (success) {
+      toast.success('Session pruned successfully');
+      onRefresh?.();
+    } else {
+      toast.error('Failed to prune session');
+    }
+    setActionInProgress(null);
+  };
+
+  const atCapacitySessions = sessions.filter(s => 
+    Math.round((s.tokens.used / s.tokens.limit) * 100) >= 95
+  ).length;
   if (loading) {
     return (
       <Card className="bg-zinc-900 border-zinc-800">
@@ -76,9 +116,19 @@ export function SessionTable({
   return (
     <Card className="bg-zinc-900 border-zinc-800">
       <CardHeader>
-        <CardTitle className="text-lg text-zinc-100">
-          Active Sessions ({sessions.length})
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg text-zinc-100">
+              Active Sessions ({sessions.length})
+            </CardTitle>
+            {atCapacitySessions > 0 && (
+              <CardDescription className="flex items-center gap-1 text-amber-400 mt-1">
+                <AlertTriangle className="w-3 h-3" />
+                {atCapacitySessions} session{atCapacitySessions > 1 ? 's' : ''} at capacity
+              </CardDescription>
+            )}
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-2">
         {sessions.map((session) => {
@@ -119,12 +169,19 @@ export function SessionTable({
                       </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-zinc-500 truncate mt-1">
-                    {session.key}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1 text-zinc-500 text-xs">
+                      <Cpu className="w-3 h-3" />
+                      <span className="font-mono">{session.model || 'default'}</span>
+                    </div>
+                    <span className="text-zinc-600">•</span>
+                    <span className="text-zinc-500 text-xs">
+                      {session.tokens.limit.toLocaleString()} max tokens
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-3 text-sm">
                   <div className="text-right">
                     <div className="flex items-center gap-1 text-zinc-400">
                       <Database className="w-3 h-3" />
@@ -135,6 +192,21 @@ export function SessionTable({
                       {formatRelativeTime(session.lastActivity)}
                     </div>
                   </div>
+                  {contextPercent >= 95 && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="h-7 px-2"
+                      onClick={(e) => handlePrune(e, session)}
+                      disabled={actionInProgress === session.key}
+                    >
+                      {actionInProgress === session.key ? (
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3 h-3" />
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
 

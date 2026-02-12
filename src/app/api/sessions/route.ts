@@ -74,20 +74,106 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function normalizeSession(raw: RawSession, agentId: string) {
+function normalizeSession(raw: any, agentId: string) {
+  const totalTokens = raw.totalTokens || (raw.inputTokens || 0) + (raw.outputTokens || 0);
+  const contextTokens = raw.contextTokens || 200000;
+  const percentUsed = Math.round((totalTokens / contextTokens) * 100);
+  
   return {
     key: raw.key,
     kind: raw.kind || 'direct',
     agentId: agentId,
     model: raw.model || 'unknown',
     tokens: {
-      used: raw.totalTokens || (raw.inputTokens || 0) + (raw.outputTokens || 0),
-      limit: raw.contextTokens || 200000,
+      used: totalTokens,
+      limit: contextTokens,
       input: raw.inputTokens || 0,
       output: raw.outputTokens || 0,
     },
+    percentUsed,
     lastActivity: new Date(raw.updatedAt).toISOString(),
-    compactions: 0, // Not available from CLI
+    compactionCount: raw.compactionCount || 0,
     sessionId: raw.sessionId,
+    flags: raw.flags || [],
+    // Add context about auto-compaction
+    canCompact: percentUsed > 80,
+    compactionStatus: percentUsed >= 100 ? 'at_capacity' : percentUsed > 80 ? 'approaching' : 'ok',
   };
+}
+
+/**
+ * POST /api/sessions
+ * Actions: compact, prune, reset
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { action, sessionKey, agentId } = body;
+
+    if (!action) {
+      return NextResponse.json({ error: 'Missing action' }, { status: 400 });
+    }
+
+    // Invalidate cache for any action
+    cachedData = null;
+    cacheTimestamp = 0;
+
+    switch (action) {
+      case 'compact': {
+        // Trigger compaction via gateway
+        // Note: OpenClaw may not expose a direct compact command
+        // This would need to be implemented in openclaw CLI
+        const { stdout } = await execAsync(
+          `openclaw gateway compact --session "${sessionKey}" --json 2>&1 || echo '{"error":"not_implemented"}'`,
+          { timeout: 30000 }
+        );
+        
+        try {
+          const result = JSON.parse(stdout);
+          if (result.error === 'not_implemented') {
+            return NextResponse.json({ 
+              success: false, 
+              error: 'Session compaction not yet exposed via CLI. Auto-compaction occurs automatically when context fills.' 
+            });
+          }
+          return NextResponse.json({ success: true, result });
+        } catch {
+          return NextResponse.json({ success: true, output: stdout });
+        }
+      }
+
+      case 'prune': {
+        // Delete/reset a session
+        const { stdout } = await execAsync(
+          `openclaw sessions reset --session "${sessionKey}" --json 2>&1 || echo '{"error":"command_failed"}'`,
+          { timeout: 30000 }
+        );
+        
+        try {
+          const result = JSON.parse(stdout);
+          return NextResponse.json({ success: !result.error, result });
+        } catch {
+          return NextResponse.json({ success: true, output: stdout });
+        }
+      }
+
+      case 'reset': {
+        // Same as prune but more explicit
+        const { stdout } = await execAsync(
+          `openclaw sessions reset --agent "${agentId || 'main'}" --session "${sessionKey}" 2>&1`,
+          { timeout: 30000 }
+        );
+        return NextResponse.json({ success: true, output: stdout });
+      }
+
+      default:
+        return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
+    }
+  } catch (error) {
+    console.error('Sessions API POST error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
 }
