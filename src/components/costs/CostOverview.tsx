@@ -43,7 +43,7 @@ export function CostOverview({ today, week, month }: CostOverviewProps) {
               <div>
                 <p className="text-sm text-zinc-400">{card.title}</p>
                 <p className="text-2xl font-bold text-zinc-100">
-                  ${card.value.toFixed(2)}
+                  ${(card.value ?? 0).toFixed(2)}
                 </p>
               </div>
             </div>

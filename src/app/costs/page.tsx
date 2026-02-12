@@ -87,12 +87,12 @@ export default function CostsPage() {
     );
   }
 
-  const summary = data?.summary || {
-    today: 0,
-    week: 0,
-    month: 0,
-    byProvider: {},
-    byModel: {},
+  const summary = {
+    today: data?.summary?.today ?? 0,
+    week: data?.summary?.week ?? 0,
+    month: data?.summary?.month ?? 0,
+    byProvider: data?.summary?.byProvider ?? {},
+    byModel: data?.summary?.byModel ?? {},
   };
 
   return (

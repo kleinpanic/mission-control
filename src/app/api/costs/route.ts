@@ -109,9 +109,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('Costs API error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    // Return empty but valid data structure on error
+    return NextResponse.json({
+      summary: {
+        today: 0,
+        week: 0,
+        month: 0,
+        byProvider: {},
+        byModel: {},
+      },
+      raw: [],
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }
