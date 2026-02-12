@@ -94,23 +94,28 @@ export async function GET(request: NextRequest) {
       for (const day of provider.daily) {
         const dayDate = day.date; // "2026-02-07"
 
+        // Calculate day cost from modelBreakdowns if totalCost is missing
+        const dayCost = day.totalCost ?? 
+          day.modelBreakdowns.reduce((sum: number, m: any) => sum + (m.cost || 0), 0);
+
         // Time-based aggregation
         if (dayDate === todayStr) {
-          summary.today += day.totalCost;
+          summary.today += dayCost;
         }
         if (dayDate >= weekAgo) {
-          summary.week += day.totalCost;
+          summary.week += dayCost;
         }
         if (dayDate >= monthStart) {
-          summary.month += day.totalCost;
+          summary.month += dayCost;
         }
 
         // Model aggregation from breakdowns
         for (const model of day.modelBreakdowns) {
+          const modelCost = model.cost || 0;
           if (!summary.byModel[model.modelName]) {
             summary.byModel[model.modelName] = 0;
           }
-          summary.byModel[model.modelName] += model.cost;
+          summary.byModel[model.modelName] += modelCost;
 
           // Add to raw for table display
           raw.push({
