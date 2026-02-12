@@ -1,37 +1,74 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSessionsStore } from "@/stores/sessions";
 import { Session } from "@/types";
 import { SessionTable } from "@/components/sessions/SessionTable";
 import { SessionDetail } from "@/components/sessions/SessionDetail";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { RefreshCw, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { useGateway } from "@/providers/GatewayProvider";
+import { cn } from "@/lib/utils";
 
 export default function SessionsPage() {
   const { sessions, setSessions, loading, setLoading } = useSessionsStore();
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  const { connected, connecting, request, subscribe } = useGateway();
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
+    if (!connected) return;
+    
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/sessions");
-      const data = await res.json();
-      if (data.sessions) {
-        setSessions(data.sessions);
+      const result = await request<{ sessions: Session[] }>("sessions.list", { 
+        messageLimit: 0 
+      });
+      
+      if (result?.sessions) {
+        setSessions(result.sessions);
       }
     } catch (err) {
+      console.error("Failed to fetch sessions:", err);
       setError(err instanceof Error ? err.message : "Failed to fetch sessions");
     } finally {
       setLoading(false);
     }
-  };
+  }, [connected, request, setSessions, setLoading]);
 
+  // Fetch sessions when connected
   useEffect(() => {
-    fetchSessions();
-  }, []);
+    if (connected) {
+      fetchSessions();
+    }
+  }, [connected, fetchSessions]);
+
+  // Subscribe to session events for live updates
+  useEffect(() => {
+    if (!connected) return;
+
+    // Subscribe to agent events (sessions change when agents run)
+    const unsubAgent = subscribe("agent", (payload) => {
+      // Refresh sessions when agent activity happens
+      if (payload.event === "run.end" || payload.event === "run.start") {
+        setTimeout(fetchSessions, 500);
+      }
+    });
+
+    // Subscribe to session events if available
+    const unsubSession = subscribe("session", (payload) => {
+      console.log("[Sessions] Session event:", payload);
+      fetchSessions();
+    });
+
+    return () => {
+      unsubAgent();
+      unsubSession();
+    };
+  }, [connected, subscribe, fetchSessions]);
 
   const handleSelectSession = (session: Session) => {
     setSelectedSession(session);
@@ -41,15 +78,45 @@ export default function SessionsPage() {
     setSelectedSession(null);
   };
 
+  // Connection status indicator
+  const connectionStatus = connected ? "connected" : connecting ? "connecting" : "disconnected";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-zinc-100">Sessions</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-zinc-100">Sessions</h1>
+          {/* Connection indicator */}
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-xs",
+              connectionStatus === "connected"
+                ? "border-emerald-500/50 text-emerald-400"
+                : connectionStatus === "connecting"
+                ? "border-yellow-500/50 text-yellow-400"
+                : "border-red-500/50 text-red-400"
+            )}
+          >
+            {connectionStatus === "connected" ? (
+              <Wifi className="w-3 h-3 mr-1" />
+            ) : connectionStatus === "connecting" ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <WifiOff className="w-3 h-3 mr-1" />
+            )}
+            {connectionStatus === "connected" 
+              ? "Live" 
+              : connectionStatus === "connecting" 
+              ? "Connecting" 
+              : "Offline"}
+          </Badge>
+        </div>
         <Button
           variant="secondary"
           size="sm"
           onClick={fetchSessions}
-          disabled={loading}
+          disabled={loading || !connected}
           className="bg-zinc-800 hover:bg-zinc-700"
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
@@ -60,6 +127,12 @@ export default function SessionsPage() {
       {error && (
         <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 text-red-400">
           {error}
+        </div>
+      )}
+
+      {!connected && !connecting && (
+        <div className="bg-yellow-900/20 border border-yellow-800 rounded-lg p-4 text-yellow-400">
+          Not connected to gateway. Session actions are disabled.
         </div>
       )}
 

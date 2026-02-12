@@ -6,9 +6,69 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquare, Clock, Database, Trash2, RefreshCw, AlertTriangle, Cpu } from "lucide-react";
+import { 
+  MessageSquare, 
+  Clock, 
+  Database, 
+  Trash2, 
+  RefreshCw, 
+  AlertTriangle, 
+  Cpu,
+  Minimize2,
+  MoreHorizontal,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useGateway } from "@/providers/GatewayProvider";
+
+// Model token limits (context windows)
+const MODEL_TOKEN_LIMITS: Record<string, number> = {
+  "claude-opus-4": 200000,
+  "claude-sonnet-4": 200000,
+  "claude-sonnet-4-5": 200000,
+  "claude-opus-4-5": 200000,
+  "claude-3-opus": 200000,
+  "claude-3-sonnet": 200000,
+  "claude-3-haiku": 200000,
+  "gpt-4o": 128000,
+  "gpt-4o-mini": 128000,
+  "gpt-4-turbo": 128000,
+  "gpt-4": 8192,
+  "gpt-5": 200000,
+  "gpt-5.2": 200000,
+  "gemini-pro": 1000000,
+  "gemini-1.5-pro": 1000000,
+  "gemini-1.5-flash": 1000000,
+  "gemini-2.0-flash": 1000000,
+  "gemini-3-flash": 1000000,
+  "gemini-3-flash-preview": 1000000,
+  "o1": 200000,
+  "o1-mini": 128000,
+  "o1-preview": 128000,
+  "o3": 200000,
+  "o3-mini": 200000,
+};
+
+function getModelLimit(model: string): number | null {
+  // Try exact match
+  if (MODEL_TOKEN_LIMITS[model]) {
+    return MODEL_TOKEN_LIMITS[model];
+  }
+  // Try partial match
+  for (const [key, limit] of Object.entries(MODEL_TOKEN_LIMITS)) {
+    if (model.toLowerCase().includes(key.toLowerCase())) {
+      return limit;
+    }
+  }
+  return null;
+}
 
 interface SessionTableProps {
   sessions: Session[];
@@ -16,21 +76,6 @@ interface SessionTableProps {
   onSelectSession: (session: Session) => void;
   selectedSessionKey?: string;
   onRefresh?: () => void;
-}
-
-async function handleSessionAction(action: string, sessionKey: string, agentId: string): Promise<boolean> {
-  try {
-    const res = await fetch('/api/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, sessionKey, agentId }),
-    });
-    const data = await res.json();
-    return data.success !== false;
-  } catch (error) {
-    console.error('Session action failed:', error);
-    return false;
-  }
 }
 
 function formatRelativeTime(timestamp: string): string {
@@ -55,6 +100,16 @@ function getChannelFromKey(key: string): string {
   return parts[2] || "direct";
 }
 
+function formatTokenLimit(limit: number): string {
+  if (limit >= 1000000) {
+    return `${(limit / 1000000).toFixed(0)}M`;
+  }
+  if (limit >= 1000) {
+    return `${(limit / 1000).toFixed(0)}K`;
+  }
+  return limit.toString();
+}
+
 export function SessionTable({
   sessions,
   loading,
@@ -63,25 +118,85 @@ export function SessionTable({
   onRefresh,
 }: SessionTableProps) {
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const { connected, request } = useGateway();
 
-  const handlePrune = async (e: React.MouseEvent, session: Session) => {
+  const handleCompact = async (e: React.MouseEvent, session: Session) => {
     e.stopPropagation();
-    const agent = getAgentFromKey(session.key);
-    setActionInProgress(session.key);
     
-    const success = await handleSessionAction('reset', session.key, agent);
-    if (success) {
-      toast.success('Session pruned successfully');
-      onRefresh?.();
-    } else {
-      toast.error('Failed to prune session');
+    if (!connected) {
+      toast.error("Not connected to gateway");
+      return;
     }
-    setActionInProgress(null);
+    
+    setActionInProgress(`compact-${session.key}`);
+    
+    try {
+      const result = await request("sessions.compact", { sessionKey: session.key });
+      
+      if (result) {
+        const saved = result.tokensSaved || result.saved || 0;
+        toast.success(`Session compacted! Saved ${saved.toLocaleString()} tokens`);
+        onRefresh?.();
+      } else {
+        toast.success("Session compacted successfully");
+        onRefresh?.();
+      }
+    } catch (error) {
+      console.error("Failed to compact session:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to compact session");
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleReset = async (e: React.MouseEvent, session: Session) => {
+    e.stopPropagation();
+    
+    if (!connected) {
+      toast.error("Not connected to gateway");
+      return;
+    }
+    
+    setActionInProgress(`reset-${session.key}`);
+    
+    try {
+      await request("sessions.reset", { sessionKey: session.key });
+      toast.success("Session reset successfully");
+      onRefresh?.();
+    } catch (error) {
+      console.error("Failed to reset session:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to reset session");
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, session: Session) => {
+    e.stopPropagation();
+    
+    if (!connected) {
+      toast.error("Not connected to gateway");
+      return;
+    }
+    
+    setActionInProgress(`delete-${session.key}`);
+    
+    try {
+      await request("sessions.delete", { sessionKey: session.key });
+      toast.success("Session deleted");
+      onRefresh?.();
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to delete session");
+    } finally {
+      setActionInProgress(null);
+    }
   };
 
   const atCapacitySessions = sessions.filter(s => 
     Math.round((s.tokens.used / s.tokens.limit) * 100) >= 95
   ).length;
+
   if (loading) {
     return (
       <Card className="bg-zinc-900 border-zinc-800">
@@ -128,6 +243,11 @@ export function SessionTable({
               </CardDescription>
             )}
           </div>
+          {!connected && (
+            <Badge variant="outline" className="text-yellow-400 border-yellow-400/50">
+              Offline
+            </Badge>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -138,6 +258,11 @@ export function SessionTable({
             (session.tokens.used / session.tokens.limit) * 100
           );
           const isSelected = session.key === selectedSessionKey;
+          const modelLimit = getModelLimit(session.model);
+          const isCompacting = actionInProgress === `compact-${session.key}`;
+          const isResetting = actionInProgress === `reset-${session.key}`;
+          const isDeleting = actionInProgress === `delete-${session.key}`;
+          const isAnyAction = isCompacting || isResetting || isDeleting;
 
           return (
             <div
@@ -176,7 +301,10 @@ export function SessionTable({
                     </div>
                     <span className="text-zinc-600">•</span>
                     <span className="text-zinc-500 text-xs">
-                      {session.tokens.limit.toLocaleString()} max tokens
+                      {session.tokens.limit.toLocaleString()} tokens
+                      {modelLimit && modelLimit !== session.tokens.limit && (
+                        <span className="text-zinc-600"> (model: {formatTokenLimit(modelLimit)})</span>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -192,18 +320,71 @@ export function SessionTable({
                       {formatRelativeTime(session.lastActivity)}
                     </div>
                   </div>
-                  {contextPercent >= 95 && (
+
+                  {/* Actions Menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        onClick={(e) => e.stopPropagation()}
+                        disabled={isAnyAction || !connected}
+                      >
+                        {isAnyAction ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <MoreHorizontal className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-700">
+                      <DropdownMenuItem 
+                        onClick={(e) => handleCompact(e as any, session)}
+                        className="text-zinc-200 focus:bg-zinc-800 focus:text-zinc-100"
+                        disabled={isCompacting}
+                      >
+                        <Minimize2 className="w-4 h-4 mr-2" />
+                        Compact Session
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={(e) => handleReset(e as any, session)}
+                        className="text-zinc-200 focus:bg-zinc-800 focus:text-zinc-100"
+                        disabled={isResetting}
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Reset Session
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-zinc-700" />
+                      <DropdownMenuItem 
+                        onClick={(e) => handleDelete(e as any, session)}
+                        className="text-red-400 focus:bg-red-900/20 focus:text-red-400"
+                        disabled={isDeleting}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Session
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Quick compact button when at capacity */}
+                  {contextPercent >= 80 && (
                     <Button
                       size="sm"
-                      variant="destructive"
-                      className="h-7 px-2"
-                      onClick={(e) => handlePrune(e, session)}
-                      disabled={actionInProgress === session.key}
+                      variant={contextPercent >= 95 ? "destructive" : "secondary"}
+                      className={cn(
+                        "h-7 px-2",
+                        contextPercent >= 95 
+                          ? "" 
+                          : "bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400"
+                      )}
+                      onClick={(e) => handleCompact(e, session)}
+                      disabled={isCompacting || !connected}
                     >
-                      {actionInProgress === session.key ? (
+                      {isCompacting ? (
                         <RefreshCw className="w-3 h-3 animate-spin" />
                       ) : (
-                        <Trash2 className="w-3 h-3" />
+                        <Minimize2 className="w-3 h-3" />
                       )}
                     </Button>
                   )}
@@ -224,6 +405,14 @@ export function SessionTable({
                   style={{ width: `${contextPercent}%` }}
                 />
               </div>
+
+              {/* Compactions indicator */}
+              {session.compactions > 0 && (
+                <div className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
+                  <Minimize2 className="w-3 h-3" />
+                  {session.compactions} previous compaction{session.compactions > 1 ? 's' : ''}
+                </div>
+              )}
             </div>
           );
         })}
