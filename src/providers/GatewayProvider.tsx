@@ -154,10 +154,11 @@ export function GatewayProvider({ children }: Props) {
     setConnecting(true);
     setConnectionStatus("connecting");
     
-    console.log("[Gateway] Connecting to ws://127.0.0.1:18789...");
+    const gatewayUrl = process.env.NEXT_PUBLIC_OPENCLAW_GATEWAY_URL || "ws://127.0.0.1:18789";
+    console.log(`[Gateway] Connecting to ${gatewayUrl}...`);
     
     try {
-      const ws = new WebSocket("ws://127.0.0.1:18789");
+      const ws = new WebSocket(gatewayUrl);
       wsRef.current = ws;
       
       ws.onopen = () => {
