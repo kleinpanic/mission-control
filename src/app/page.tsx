@@ -17,7 +17,9 @@ import {
   Settings,
   Activity,
   AlertCircle,
+  Loader2,
 } from "lucide-react";
+import { useGateway } from "@/providers/GatewayProvider";
 import { useRealtimeStore } from "@/stores/realtime";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -39,6 +41,8 @@ interface StatusData {
   gateway: {
     status: "connected" | "disconnected" | "unknown";
     url: string;
+    uptime?: number;
+    version?: string;
   };
   agents: AgentInfo[];
   sessions: {
@@ -50,6 +54,10 @@ interface StatusData {
     nextHeartbeats: { agentId: string; nextIn: string; nextInMs: number }[];
   };
   channels: string[];
+  health?: {
+    status: string;
+    checks?: Record<string, any>;
+  };
 }
 
 interface CostData {
@@ -60,6 +68,7 @@ interface CostData {
     byProvider: Record<string, number>;
     byModel: Record<string, number>;
   };
+  billingAccount?: string;
 }
 
 interface CronJob {
@@ -78,59 +87,161 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
 
-  const { connectionStatus, events } = useRealtimeStore();
+  const { connected, connecting, request, subscribe } = useGateway();
+  const { events } = useRealtimeStore();
 
   const fetchData = useCallback(async () => {
+    if (!connected) return;
+    
+    setLoading(true);
     try {
-      const [statusRes, costsRes, cronRes] = await Promise.all([
-        fetch("/api/status"),
-        fetch("/api/costs"),
-        fetch("/api/cron"),
+      // Fetch all data in parallel via WebSocket
+      const [statusResult, costsResult, cronResult] = await Promise.all([
+        request<any>("status").catch(e => { console.error("status error:", e); return null; }),
+        request<any>("usage.cost").catch(e => { console.error("usage.cost error:", e); return null; }),
+        request<any>("cron.list").catch(e => { console.error("cron.list error:", e); return null; }),
       ]);
 
-      if (statusRes.ok) {
-        const statusData = await statusRes.json();
-        setStatus(statusData);
+      if (statusResult) {
+        // Transform status response to expected format
+        const agents: AgentInfo[] = (statusResult.agents || []).map((agent: any) => ({
+          id: agent.id,
+          name: agent.name || agent.id,
+          enabled: agent.enabled ?? true,
+          status: agent.status || "idle",
+          model: agent.model || agent.defaultModel,
+          heartbeatInterval: agent.heartbeatInterval || "~15m",
+          lastActivity: agent.lastActivity,
+          lastActivityAge: agent.lastActivityAge || formatAge(agent.lastActivity),
+          activeSessions: agent.activeSessions || 0,
+          maxSessionPercent: agent.maxSessionPercent || 0,
+        }));
+
+        setStatus({
+          gateway: {
+            status: "connected",
+            url: statusResult.gateway?.url || "ws://127.0.0.1:18789",
+            uptime: statusResult.gateway?.uptime,
+            version: statusResult.gateway?.version,
+          },
+          agents,
+          sessions: {
+            total: statusResult.sessions?.total || statusResult.activeSessions || 0,
+            atCapacity: statusResult.sessions?.atCapacity || 0,
+          },
+          heartbeat: {
+            defaultAgentId: statusResult.heartbeat?.defaultAgentId || "main",
+            nextHeartbeats: statusResult.heartbeat?.nextHeartbeats || [],
+          },
+          channels: statusResult.channels || [],
+          health: statusResult.health,
+        });
       }
 
-      if (costsRes.ok) {
-        const costsData = await costsRes.json();
-        setCosts(costsData);
+      if (costsResult) {
+        setCosts({
+          summary: {
+            today: costsResult.today ?? costsResult.summary?.today ?? 0,
+            week: costsResult.week ?? costsResult.summary?.week ?? 0,
+            month: costsResult.month ?? costsResult.summary?.month ?? 0,
+            byProvider: costsResult.byProvider ?? costsResult.summary?.byProvider ?? {},
+            byModel: costsResult.byModel ?? costsResult.summary?.byModel ?? {},
+          },
+          billingAccount: costsResult.billingAccount,
+        });
       }
 
-      if (cronRes.ok) {
-        const cronData = await cronRes.json();
-        setCronJobs(cronData.jobs || []);
+      if (cronResult) {
+        setCronJobs(cronResult.jobs || cronResult || []);
       }
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
+      toast.error("Failed to fetch dashboard data");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [connected, request]);
 
+  // Fetch data when connected
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 10000); // Refresh every 10s
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    if (connected) {
+      fetchData();
+    }
+  }, [connected, fetchData]);
+
+  // Subscribe to real-time events
+  useEffect(() => {
+    if (!connected) return;
+
+    // Subscribe to agent events for live status updates
+    const unsubAgent = subscribe("agent", (payload) => {
+      console.log("[Dashboard] Agent event:", payload);
+      // Update agent status in real-time
+      if (payload.agentId && payload.status) {
+        setStatus(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            agents: prev.agents.map(a => 
+              a.id === payload.agentId 
+                ? { ...a, status: payload.status, lastActivityAge: "Just now" }
+                : a
+            )
+          };
+        });
+      }
+    });
+
+    // Subscribe to heartbeat events
+    const unsubHeartbeat = subscribe("heartbeat", (payload) => {
+      console.log("[Dashboard] Heartbeat event:", payload);
+      toast.info(`Heartbeat: ${payload.agentId || "main"}`);
+      // Refresh data after heartbeat
+      setTimeout(fetchData, 1000);
+    });
+
+    // Subscribe to cron events
+    const unsubCron = subscribe("cron", (payload) => {
+      console.log("[Dashboard] Cron event:", payload);
+      // Refresh cron data
+      request<any>("cron.list").then(result => {
+        if (result) setCronJobs(result.jobs || result || []);
+      }).catch(console.error);
+    });
+
+    // Subscribe to health events
+    const unsubHealth = subscribe("health", (payload) => {
+      console.log("[Dashboard] Health event:", payload);
+      if (payload.status === "degraded" || payload.status === "unhealthy") {
+        toast.warning(`Gateway health: ${payload.status}`);
+      }
+    });
+
+    // Periodic refresh every 30 seconds for data that doesn't have events
+    const interval = setInterval(fetchData, 30000);
+
+    return () => {
+      unsubAgent();
+      unsubHeartbeat();
+      unsubCron();
+      unsubHealth();
+      clearInterval(interval);
+    };
+  }, [connected, subscribe, request, fetchData]);
 
   const handleTriggerHeartbeat = async () => {
+    if (!connected) {
+      toast.error("Not connected to gateway");
+      return;
+    }
+    
     setTriggering(true);
     try {
-      const res = await fetch("/api/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "trigger-heartbeat" }),
-      });
-
-      if (res.ok) {
-        toast.success("Heartbeat triggered!");
-        fetchData();
-      } else {
-        toast.error("Failed to trigger heartbeat");
-      }
+      await request("wake", { reason: "manual" });
+      toast.success("Heartbeat triggered!");
+      setTimeout(fetchData, 2000);
     } catch (error) {
+      console.error("Failed to trigger heartbeat:", error);
       toast.error("Failed to trigger heartbeat");
     } finally {
       setTriggering(false);
@@ -151,8 +262,12 @@ export default function Dashboard() {
   };
 
   const activeAgents = status?.agents.filter((a) => a.status === "active").length || 0;
+  const waitingAgents = status?.agents.filter((a) => a.status === "waiting").length || 0;
   const totalAgents = status?.agents.length || 0;
   const nextHeartbeat = status?.heartbeat.nextHeartbeats[0];
+
+  // Connection status display
+  const connectionStatus = connected ? "connected" : connecting ? "connecting" : "disconnected";
 
   return (
     <div className="space-y-6">
@@ -176,11 +291,13 @@ export default function Dashboard() {
           >
             {connectionStatus === "connected" ? (
               <Wifi className="w-4 h-4" />
+            ) : connectionStatus === "connecting" ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <WifiOff className="w-4 h-4" />
             )}
             {connectionStatus === "connected"
-              ? "Connected"
+              ? "Live"
               : connectionStatus === "connecting"
               ? "Connecting..."
               : "Disconnected"}
@@ -189,7 +306,7 @@ export default function Dashboard() {
             variant="secondary"
             size="sm"
             onClick={fetchData}
-            disabled={loading}
+            disabled={loading || !connected}
             className="bg-zinc-800 hover:bg-zinc-700"
           >
             <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
@@ -202,15 +319,21 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-300">Active Agents</CardTitle>
+            <CardTitle className="text-sm font-medium text-zinc-300">Agents</CardTitle>
             <Users className="h-4 w-4 text-zinc-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-zinc-100">
-              {activeAgents}/{totalAgents}
+              {activeAgents > 0 ? (
+                <span className="text-emerald-400">{activeAgents} active</span>
+              ) : waitingAgents > 0 ? (
+                <span className="text-yellow-400">{waitingAgents} waiting</span>
+              ) : (
+                <span>{totalAgents} idle</span>
+              )}
             </div>
             <p className="text-xs text-zinc-500">
-              {status?.sessions.atCapacity || 0} sessions at capacity
+              {totalAgents} configured • {status?.sessions.atCapacity || 0} at capacity
             </p>
           </CardContent>
         </Card>
@@ -281,13 +404,13 @@ export default function Dashboard() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Model:</span>
-                    <span className="text-zinc-200 font-mono text-xs">
+                    <span className="text-zinc-200 font-mono text-xs truncate max-w-[150px]">
                       {agent.model || "default"}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Last Activity:</span>
-                    <span className="text-zinc-200">{agent.lastActivityAge}</span>
+                    <span className="text-zinc-200">{agent.lastActivityAge || "—"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Heartbeat:</span>
@@ -308,7 +431,9 @@ export default function Dashboard() {
                 </div>
               </div>
             )) || (
-              <p className="text-zinc-500 col-span-3 text-center py-8">Loading agents...</p>
+              <p className="text-zinc-500 col-span-3 text-center py-8">
+                {!connected ? "Connecting to gateway..." : "Loading agents..."}
+              </p>
             )}
           </div>
         </CardContent>
@@ -349,10 +474,14 @@ export default function Dashboard() {
             <div className="flex gap-2 pt-2">
               <Button
                 onClick={handleTriggerHeartbeat}
-                disabled={triggering}
+                disabled={triggering || !connected}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700"
               >
-                <Play className={cn("w-4 h-4 mr-2", triggering && "animate-spin")} />
+                {triggering ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4 mr-2" />
+                )}
                 Trigger Now
               </Button>
               <Button variant="outline" className="flex-1" disabled>
@@ -396,7 +525,7 @@ export default function Dashboard() {
                       {job.schedule?.kind || "cron"}
                     </Badge>
                   </div>
-                )) || <p className="text-zinc-500 text-sm">No cron jobs scheduled</p>}
+                ))}
               {cronJobs.filter((job) => job.enabled).length === 0 && (
                 <p className="text-zinc-500 text-sm text-center py-4">No active cron jobs</p>
               )}
@@ -409,13 +538,15 @@ export default function Dashboard() {
       <Card className="bg-zinc-900 border-zinc-800">
         <CardHeader>
           <CardTitle className="text-lg text-zinc-100">Recent Activity</CardTitle>
-          <CardDescription className="text-zinc-400">Latest events from the gateway</CardDescription>
+          <CardDescription className="text-zinc-400">Latest events from the gateway (live)</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
             {events.length === 0 ? (
               <p className="text-sm text-zinc-500 text-center py-8">
-                No recent events. Activity will appear here when agents are active.
+                {connected 
+                  ? "No recent events. Activity will appear here when agents are active."
+                  : "Connect to gateway to see live events."}
               </p>
             ) : (
               events.slice(0, 10).map((event, idx) => (
@@ -453,25 +584,50 @@ export default function Dashboard() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700">
-              <h4 className="text-sm font-medium text-zinc-300 mb-2">Default Model</h4>
-              <p className="text-lg font-mono text-zinc-100">gpt-5.2</p>
-              <p className="text-xs text-zinc-500 mt-1">Used when no model specified</p>
-            </div>
-            <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700">
-              <h4 className="text-sm font-medium text-zinc-300 mb-2">Context Limit</h4>
-              <p className="text-lg font-mono text-zinc-100">200k tokens</p>
-              <p className="text-xs text-zinc-500 mt-1">Max context per session</p>
+              <h4 className="text-sm font-medium text-zinc-300 mb-2">Gateway Status</h4>
+              <p className="text-lg font-mono text-emerald-400">
+                {connected ? "Connected" : connecting ? "Connecting..." : "Disconnected"}
+              </p>
+              <p className="text-xs text-zinc-500 mt-1">
+                {status?.gateway?.version ? `v${status.gateway.version}` : "WebSocket Protocol v3"}
+              </p>
             </div>
             <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700">
               <h4 className="text-sm font-medium text-zinc-300 mb-2">Active Channels</h4>
               <p className="text-lg font-mono text-zinc-100">
                 {status?.channels.length || 0}
               </p>
-              <p className="text-xs text-zinc-500 mt-1">Connected messaging channels</p>
+              <p className="text-xs text-zinc-500 mt-1">
+                {status?.channels.slice(0, 3).join(", ") || "No channels"}
+                {(status?.channels.length || 0) > 3 && "..."}
+              </p>
+            </div>
+            <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700">
+              <h4 className="text-sm font-medium text-zinc-300 mb-2">Billing Account</h4>
+              <p className="text-lg font-mono text-zinc-100">
+                {costs?.billingAccount || "Default"}
+              </p>
+              <p className="text-xs text-zinc-500 mt-1">
+                {Object.keys(costs?.summary.byProvider || {}).join(", ") || "No providers"}
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
     </div>
   );
+}
+
+// Helper function to format time age
+function formatAge(timestamp: string | null): string {
+  if (!timestamp) return "—";
+  const diff = Date.now() - new Date(timestamp).getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return "Just now";
 }
