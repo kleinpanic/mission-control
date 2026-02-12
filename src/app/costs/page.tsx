@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { CostOverview } from "@/components/costs/CostOverview";
 import { ProviderBreakdown } from "@/components/costs/ProviderBreakdown";
 import { CostTable } from "@/components/costs/CostTable";
+import { CostTrendChart } from "@/components/costs/CostTrendChart";
+import { ModelUsageChart } from "@/components/costs/ModelUsageChart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,8 +23,22 @@ interface CostData {
   raw: any[];
 }
 
+interface CostHistoryEntry {
+  date: string;
+  cost: number;
+}
+
+interface CostHistoryData {
+  daily: CostHistoryEntry[];
+  weekly: CostHistoryEntry[];
+  monthly: CostHistoryEntry[];
+  byAgent: Record<string, number>;
+  byModel: Record<string, number>;
+}
+
 export default function CostsPage() {
   const [data, setData] = useState<CostData | null>(null);
+  const [historyData, setHistoryData] = useState<CostHistoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,12 +46,22 @@ export default function CostsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/costs");
-      if (!res.ok) {
+      const [costsRes, historyRes] = await Promise.all([
+        fetch("/api/costs"),
+        fetch("/api/costs/history"),
+      ]);
+
+      if (!costsRes.ok || !historyRes.ok) {
         throw new Error("Failed to fetch costs");
       }
-      const costData = await res.json();
+
+      const [costData, historyData] = await Promise.all([
+        costsRes.json(),
+        historyRes.json(),
+      ]);
+
       setData(costData);
+      setHistoryData(historyData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -117,7 +143,24 @@ export default function CostsPage() {
         month={summary.month}
       />
 
-      {/* Charts */}
+      {/* Cost Trend Chart (NEW) */}
+      {historyData && (
+        <CostTrendChart
+          daily={historyData.daily}
+          weekly={historyData.weekly}
+          monthly={historyData.monthly}
+        />
+      )}
+
+      {/* Model and Agent Usage Charts (NEW) */}
+      {historyData && (
+        <ModelUsageChart
+          byModel={historyData.byModel}
+          byAgent={historyData.byAgent}
+        />
+      )}
+
+      {/* Provider/Model Breakdown (Existing) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ProviderBreakdown data={summary.byProvider} />
         <ProviderBreakdown data={summary.byModel} title="By Model" />

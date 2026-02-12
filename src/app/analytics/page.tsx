@@ -71,7 +71,17 @@ export default function AnalyticsPage() {
   const [fileActivity, setFileActivity] = useState<FileActivity[]>([]);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [levelFilter, setLevelFilter] = useState<string | null>(null);
+  const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Extract unique agents from logs
+  const uniqueAgents = Array.from(
+    new Set(
+      logs
+        .map((log: any) => log.agent || log.agentId)
+        .filter(Boolean)
+    )
+  ).sort();
 
   const fetchData = async () => {
     setLoading(true);
@@ -107,9 +117,19 @@ export default function AnalyticsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const filteredLogs = levelFilter
-    ? logs.filter(log => log.level === levelFilter)
-    : logs;
+  let filteredLogs = logs;
+  
+  // Apply level filter
+  if (levelFilter) {
+    filteredLogs = filteredLogs.filter(log => log.level === levelFilter);
+  }
+  
+  // Apply agent filter
+  if (agentFilter) {
+    filteredLogs = filteredLogs.filter((log: any) => 
+      (log.agent === agentFilter || log.agentId === agentFilter)
+    );
+  }
 
   const errorCount = logs.filter(log => log.level === 'error').length;
   const warningCount = logs.filter(log => log.level === 'warning').length;
@@ -213,35 +233,63 @@ export default function AnalyticsPage() {
                   <CardTitle className="text-lg">Log Viewer</CardTitle>
                   <CardDescription>System logs with error highlighting</CardDescription>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant={levelFilter === null ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setLevelFilter(null)}
-                  >
-                    All
-                  </Button>
-                  <Button
-                    variant={levelFilter === 'error' ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setLevelFilter('error')}
-                  >
-                    Errors
-                  </Button>
-                  <Button
-                    variant={levelFilter === 'warning' ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setLevelFilter('warning')}
-                  >
-                    Warnings
-                  </Button>
-                  <Button
-                    variant={levelFilter === 'info' ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setLevelFilter('info')}
-                  >
-                    Info
-                  </Button>
+                <div className="space-y-2">
+                  {/* Level Filters */}
+                  <div className="flex gap-2 flex-wrap">
+                    <span className="text-xs text-muted-foreground self-center mr-2">Level:</span>
+                    <Button
+                      variant={levelFilter === null ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setLevelFilter(null)}
+                    >
+                      All
+                    </Button>
+                    <Button
+                      variant={levelFilter === 'error' ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setLevelFilter('error')}
+                    >
+                      Errors
+                    </Button>
+                    <Button
+                      variant={levelFilter === 'warning' ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setLevelFilter('warning')}
+                    >
+                      Warnings
+                    </Button>
+                    <Button
+                      variant={levelFilter === 'info' ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setLevelFilter('info')}
+                    >
+                      Info
+                    </Button>
+                  </div>
+                  
+                  {/* Agent Filters (NEW) */}
+                  {uniqueAgents.length > 0 && (
+                    <div className="flex gap-2 flex-wrap">
+                      <span className="text-xs text-muted-foreground self-center mr-2">Agent:</span>
+                      <Button
+                        variant={agentFilter === null ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setAgentFilter(null)}
+                      >
+                        All
+                      </Button>
+                      {uniqueAgents.map((agent) => (
+                        <Button
+                          key={agent}
+                          variant={agentFilter === agent ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setAgentFilter(agent as string)}
+                        >
+                          {agent}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </CardHeader>
