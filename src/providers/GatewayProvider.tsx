@@ -54,10 +54,10 @@ export function GatewayProvider({ children }: Props) {
             minProtocol: 3,
             maxProtocol: 3,
             client: {
-              id: "mission-control",
+              id: "openclaw-control-ui",
               version: "1.0.0",
               platform: "web",
-              mode: "operator"
+              mode: "ui"
             },
             role: "operator",
             scopes: ["operator.read", "operator.write"],
