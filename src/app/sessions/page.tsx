@@ -17,17 +17,10 @@ export default function SessionsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/gateway", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          method: "sessions.list",
-          params: { messageLimit: 3 },
-        }),
-      });
+      const res = await fetch("/api/sessions");
       const data = await res.json();
-      if (data.result?.sessions) {
-        setSessions(data.result.sessions);
+      if (data.sessions) {
+        setSessions(data.sessions);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch sessions");
