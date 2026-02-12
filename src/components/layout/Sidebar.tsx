@@ -10,6 +10,7 @@ import {
   Clock,
   MessageSquare,
   Settings,
+  ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Agents", href: "/agents", icon: Bot },
   { name: "Kanban", href: "/kanban", icon: Kanban },
+  { name: "Approvals", href: "/approvals", icon: ClipboardCheck },
   { name: "Costs", href: "/costs", icon: DollarSign },
   { name: "Cron", href: "/cron", icon: Clock },
   { name: "Sessions", href: "/sessions", icon: MessageSquare },
