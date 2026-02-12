@@ -9,7 +9,6 @@ interface CostHistoryEntry {
   cost: number;
   provider?: string;
   model?: string;
-  agent?: string;
 }
 
 interface CostHistoryResponse {
@@ -18,90 +17,94 @@ interface CostHistoryResponse {
   monthly: CostHistoryEntry[];
   byAgent: Record<string, number>;
   byModel: Record<string, number>;
+  byProvider: Record<string, number>;
 }
+
+// Cache for 5 minutes
+let cache: CostHistoryResponse | null = null;
+let cacheTime = 0;
+const CACHE_TTL = 5 * 60 * 1000;
 
 /**
  * GET /api/costs/history
  * Returns cost data aggregated over time (daily/weekly/monthly)
- * Uses codexbar cost API or session logs to build time series
+ * Uses codexbar cost API to build time series
  */
 export async function GET() {
   try {
-    // Get cost data from codexbar
+    const now = Date.now();
+    
+    // Return cached data if still valid
+    if (cache && (now - cacheTime) < CACHE_TTL) {
+      return NextResponse.json(cache);
+    }
+
+    // Get cost data from codexbar (all providers)
     const { stdout: rawCostData } = await execAsync(
-      'codexbar cost --provider all --format json --last 30d 2>/dev/null || echo "[]"'
+      'codexbar cost --provider all --format json 2>/dev/null || echo "[]"'
     );
 
-    let costData: any[] = [];
+    let providers: any[] = [];
     try {
-      costData = JSON.parse(rawCostData.trim() || "[]");
+      providers = JSON.parse(rawCostData.trim() || "[]");
     } catch {
-      costData = [];
+      providers = [];
     }
 
-    // Also check session logs for more granular data
-    const { stdout: sessionLogsRaw } = await execAsync(
-      `find ~/.openclaw/logs -name "session-*.jsonl" -type f -mtime -30 -exec cat {} \\; 2>/dev/null | tail -10000 || echo ""`
-    );
-
-    const sessionLines = sessionLogsRaw
-      .trim()
-      .split("\n")
-      .filter((line) => line.trim());
-
-    const sessionCosts: CostHistoryEntry[] = [];
-    for (const line of sessionLines) {
-      try {
-        const entry = JSON.parse(line);
-        if (entry.usage?.cost !== undefined && entry.timestamp) {
-          sessionCosts.push({
-            date: entry.timestamp.split("T")[0],
-            cost: entry.usage.cost,
-            provider: entry.usage.provider,
-            model: entry.model,
-            agent: entry.agentId,
-          });
-        }
-      } catch {
-        // Skip invalid lines
-      }
-    }
-
-    // Aggregate by day
+    // Aggregate by day from codexbar data
     const dailyMap: Record<string, number> = {};
-    const agentMap: Record<string, number> = {};
     const modelMap: Record<string, number> = {};
+    const providerMap: Record<string, number> = {};
 
-    sessionCosts.forEach((entry) => {
-      dailyMap[entry.date] = (dailyMap[entry.date] || 0) + entry.cost;
-      if (entry.agent) {
-        agentMap[entry.agent] = (agentMap[entry.agent] || 0) + entry.cost;
-      }
-      if (entry.model) {
-        modelMap[entry.model] = (modelMap[entry.model] || 0) + entry.cost;
-      }
-    });
+    for (const provider of providers) {
+      const providerName = provider.provider || "unknown";
+      
+      // Add to provider totals
+      const providerTotal = provider.totals?.totalCost || 0;
+      providerMap[providerName] = (providerMap[providerName] || 0) + providerTotal;
 
-    // Convert to sorted arrays
+      // Process daily entries
+      for (const day of provider.daily || []) {
+        const date = day.date;
+        // Calculate day cost from modelBreakdowns if totalCost is missing
+        const dayCost = day.totalCost ?? 
+          (day.modelBreakdowns || []).reduce((sum: number, m: any) => sum + (m.cost || 0), 0);
+
+        if (dayCost > 0) {
+          dailyMap[date] = (dailyMap[date] || 0) + dayCost;
+        }
+
+        // Model breakdown
+        for (const model of day.modelBreakdowns || []) {
+          const modelCost = model.cost || 0;
+          if (modelCost > 0) {
+            const modelName = model.modelName || "unknown";
+            modelMap[modelName] = (modelMap[modelName] || 0) + modelCost;
+          }
+        }
+      }
+    }
+
+    // Convert to sorted array
     const daily = Object.entries(dailyMap)
-      .map(([date, cost]) => ({ date, cost }))
+      .map(([date, cost]) => ({ date, cost: Math.round(cost * 100) / 100 }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Weekly aggregation (group by week)
+    // Weekly aggregation (group by week start - Sunday)
     const weeklyMap: Record<string, number> = {};
     daily.forEach((entry) => {
       const date = new Date(entry.date);
       const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay()); // Sunday of that week
+      weekStart.setDate(date.getDate() - date.getDay());
       const weekKey = weekStart.toISOString().split("T")[0];
       weeklyMap[weekKey] = (weeklyMap[weekKey] || 0) + entry.cost;
     });
 
     const weekly = Object.entries(weeklyMap)
-      .map(([date, cost]) => ({ date, cost }))
+      .map(([date, cost]) => ({ date, cost: Math.round(cost * 100) / 100 }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Monthly aggregation (group by month)
+    // Monthly aggregation
     const monthlyMap: Record<string, number> = {};
     daily.forEach((entry) => {
       const monthKey = entry.date.substring(0, 7); // YYYY-MM
@@ -109,16 +112,29 @@ export async function GET() {
     });
 
     const monthly = Object.entries(monthlyMap)
-      .map(([date, cost]) => ({ date: `${date}-01`, cost }))
+      .map(([date, cost]) => ({ date: `${date}-01`, cost: Math.round(cost * 100) / 100 }))
       .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Round all values
+    Object.keys(modelMap).forEach((key) => {
+      modelMap[key] = Math.round(modelMap[key] * 100) / 100;
+    });
+    Object.keys(providerMap).forEach((key) => {
+      providerMap[key] = Math.round(providerMap[key] * 100) / 100;
+    });
 
     const response: CostHistoryResponse = {
       daily,
       weekly,
       monthly,
-      byAgent: agentMap,
+      byAgent: {}, // Agent data would need session logs - keeping empty for now
       byModel: modelMap,
+      byProvider: providerMap,
     };
+
+    // Update cache
+    cache = response;
+    cacheTime = now;
 
     return NextResponse.json(response);
   } catch (error) {
@@ -130,6 +146,7 @@ export async function GET() {
         monthly: [],
         byAgent: {},
         byModel: {},
+        byProvider: {},
       },
       { status: 500 }
     );

@@ -70,6 +70,7 @@ export default function SessionsPage() {
             loading={loading}
             onSelectSession={handleSelectSession}
             selectedSessionKey={selectedSession?.key}
+            onRefresh={fetchSessions}
           />
         </div>
 
