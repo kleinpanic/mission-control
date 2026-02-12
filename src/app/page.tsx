@@ -124,12 +124,12 @@ export default function Dashboard() {
           const heartbeat = heartbeatByAgent.get(agent.id);
           
           // Find most recent activity across all sessions for this agent
-          const mostRecentSession = sessions.reduce((latest: any, session: any) => {
-            if (!latest) return session;
-            const latestTime = latest.updatedAt || 0;
-            const sessionTime = session.updatedAt || 0;
-            return sessionTime > latestTime ? session : latest;
-          }, null);
+          let mostRecentSession = null;
+          for (const session of sessions) {
+            if (!mostRecentSession || (session.updatedAt || 0) > (mostRecentSession.updatedAt || 0)) {
+              mostRecentSession = session;
+            }
+          }
           
           const lastActivityMs = mostRecentSession?.updatedAt;
           const lastActivity = lastActivityMs ? new Date(lastActivityMs).toISOString() : null;
@@ -143,6 +143,9 @@ export default function Dashboard() {
           if (hasWaiting) status = "waiting";
           else if (recentActivity) status = "active";
           
+          const percentages = sessions.map((s: any) => s.percentUsed || 0);
+          const maxPercent = percentages.length > 0 ? Math.max(...percentages, 0) : 0;
+          
           return {
             id: agent.id,
             name: agent.name || agent.id,
@@ -153,9 +156,9 @@ export default function Dashboard() {
             lastActivity,
             lastActivityAge: formatAge(lastActivity),
             activeSessions,
-            maxSessionPercent: Math.max(...sessions.map((s: any) => s.percentUsed || 0), 0),
+            maxSessionPercent: maxPercent,
           };
-        }));
+        });
 
         setStatus({
           gateway: {
@@ -166,7 +169,7 @@ export default function Dashboard() {
           },
           agents,
           sessions: {
-            total: statusResult?.sessions?.length || 0,
+            total: statusResult?.sessions?.count || 0,
             atCapacity: 0,
           },
           heartbeat: {
