@@ -25,7 +25,7 @@ export default function SessionsPage() {
     setError(null);
     try {
       const result = await request<{ sessions: Session[] }>("sessions.list", { 
-        messageLimit: 0 
+        limit: 100
       });
       
       if (result?.sessions) {
