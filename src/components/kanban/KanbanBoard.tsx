@@ -13,8 +13,8 @@ interface KanbanBoardProps {
 }
 
 const columns: { id: TaskStatus; title: string; color: string }[] = [
-  { id: "queue", title: "Queue", color: "border-zinc-600" },
-  { id: "inProgress", title: "In Progress", color: "border-blue-500" },
+  { id: "intake", title: "Intake", color: "border-zinc-600" },
+  { id: "in_progress", title: "In Progress", color: "border-blue-500" },
   { id: "completed", title: "Completed", color: "border-green-500" },
 ];
 

@@ -1,19 +1,34 @@
-// Mission Control - Tasks API
+// Mission Control - Tasks API (shared database with oc-tasks)
 import { NextRequest, NextResponse } from 'next/server';
 import { createTask, getTasks, updateTask, deleteTask } from '@/lib/db';
-import { Task, TaskStatus, TaskPriority, TaskType } from '@/types';
+import { TaskStatus, TaskPriority, TaskType } from '@/types';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status') as TaskStatus | null;
+    const status = searchParams.get('status');
     const assignedTo = searchParams.get('assignedTo');
     const type = searchParams.get('type') as TaskType | null;
+    const priority = searchParams.get('priority') as TaskPriority | null;
+    const list = searchParams.get('list');
+    const tag = searchParams.get('tag');
+    const backburnered = searchParams.get('backburnered');
+    const sort = searchParams.get('sort');
 
     const filters: any = {};
-    if (status) filters.status = status;
+
+    // Support comma-separated statuses
+    if (status) {
+      const statuses = status.split(',') as TaskStatus[];
+      filters.status = statuses.length === 1 ? statuses[0] : statuses;
+    }
     if (assignedTo) filters.assignedTo = assignedTo;
     if (type) filters.type = type;
+    if (priority) filters.priority = priority;
+    if (list) filters.list = list;
+    if (tag) filters.tag = tag;
+    if (backburnered !== null) filters.backburnered = backburnered === 'true';
+    if (sort) filters.sort = sort;
 
     const tasks = getTasks(filters);
     return NextResponse.json({ tasks });
@@ -29,11 +44,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, description, status, priority, type, assignedTo, tags, metadata } = body;
+    const { title, description, status, priority, type, assignedTo, tags, metadata,
+            complexity, danger, list, dueDate, estimatedMinutes, parentId, projectId } = body;
 
-    if (!title || !status || !priority || !type) {
+    if (!title) {
       return NextResponse.json(
-        { error: 'Missing required fields: title, status, priority, type' },
+        { error: 'Missing required field: title' },
         { status: 400 }
       );
     }
@@ -41,12 +57,19 @@ export async function POST(request: NextRequest) {
     const task = createTask({
       title,
       description,
-      status: status as TaskStatus,
-      priority: priority as TaskPriority,
-      type: type as TaskType,
+      status: (status || 'intake') as TaskStatus,
+      priority: (priority || 'medium') as TaskPriority,
+      type: (type || 'manual') as TaskType,
+      complexity: complexity || 'simple',
+      danger: danger || 'safe',
       assignedTo: assignedTo || null,
+      list: list || 'agents',
       tags: tags || [],
       metadata,
+      dueDate: dueDate || null,
+      estimatedMinutes: estimatedMinutes || null,
+      parentId: parentId || null,
+      projectId: projectId || null,
     });
 
     return NextResponse.json({ task }, { status: 201 });

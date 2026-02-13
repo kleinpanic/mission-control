@@ -20,15 +20,17 @@ interface TaskCardProps {
   onDelete: () => void;
 }
 
-const priorityConfig = {
+const priorityConfig: Record<string, { color: string }> = {
   low: { color: "bg-zinc-600 text-zinc-300" },
   medium: { color: "bg-yellow-600 text-yellow-100" },
   high: { color: "bg-red-600 text-red-100" },
+  critical: { color: "bg-red-800 text-red-100" },
 };
 
-const typeConfig = {
+const typeConfig: Record<string, { color: string; label: string }> = {
   manual: { color: "bg-blue-600 text-blue-100", label: "Manual" },
   auto: { color: "bg-purple-600 text-purple-100", label: "Auto" },
+  sync: { color: "bg-cyan-600 text-cyan-100", label: "Sync" },
 };
 
 export function TaskCard({ task, onDragStart, onEdit, onDelete }: TaskCardProps) {
