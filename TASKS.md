@@ -64,8 +64,8 @@
 - Build check: `npm run build`
 
 ## Next Steps (Future)
-- [ ] Add compact/prune automation policies
-- [ ] Add session compaction scheduling
+- [x] Add compact/prune automation policies (CompactionPolicies component - auto-compact threshold, stale pruning, protected agents)
+- [x] Add session compaction scheduling (integrated into CompactionPolicies with batch Run Now)
 - [x] Add model usage alerts (ModelUsageAlerts component - flags disproportionate spend + paid fallback)
 - [x] Add cost budget thresholds (BudgetAlerts component - configurable daily/weekly/monthly with localStorage)
 - [x] Enhance realtime event filtering (ActivityFeed filter by event type + agent)
