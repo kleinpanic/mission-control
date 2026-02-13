@@ -27,9 +27,9 @@ export function KanbanBoard({
 }: KanbanBoardProps) {
   if (loading) {
     return (
-      <div className="grid grid-cols-3 gap-4 h-full">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {columns.map((column) => (
-          <div key={column.id} className="bg-zinc-900 rounded-lg p-4 space-y-3">
+          <div key={column.id} className="bg-zinc-900 rounded-lg p-4 space-y-3 min-h-[400px]">
             <Skeleton className="h-6 w-24 bg-zinc-800" />
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-24 bg-zinc-800" />
@@ -64,7 +64,7 @@ export function KanbanBoard({
   };
 
   return (
-    <div className="grid grid-cols-3 gap-4 h-full">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-h-[500px]">
       {columns.map((column) => (
         <KanbanColumn
           key={column.id}

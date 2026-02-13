@@ -43,7 +43,7 @@ const AVAILABLE_MODELS = [
 
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const { connected, request } = useGateway();
+  const { connected, connecting, request } = useGateway();
   const [config, setConfig] = useState<GatewayConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -51,8 +51,12 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function fetchConfig() {
-      if (!connected) return;
+      if (!connected) {
+        if (!connecting) setLoading(false);
+        return;
+      }
       
+      setLoading(true);
       try {
         const [agentsResult, statusResult] = await Promise.all([
           request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
@@ -97,7 +101,7 @@ export default function SettingsPage() {
       }
     }
     fetchConfig();
-  }, [connected, request]);
+  }, [connected, connecting, request]);
 
   const handleModelChange = (agentId: string, model: string) => {
     setModelOverrides((prev) => ({
