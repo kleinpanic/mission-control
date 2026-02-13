@@ -43,7 +43,7 @@ const AVAILABLE_MODELS = [
 
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const { connected, connecting, request } = useGateway();
+  const { connected, connecting, gatewayUrl, request } = useGateway();
   const [config, setConfig] = useState<GatewayConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -120,40 +120,33 @@ export default function SettingsPage() {
     try {
       const model = modelOverrides[agentId];
       
-      // Fetch current config via WebSocket
-      const currentConfig = await request<any>('config.get');
-      
-      // Update the agent's model in the config
-      const updatedConfig = { ...currentConfig };
-      if (!updatedConfig.agents) updatedConfig.agents = {};
-      if (!updatedConfig.agents.list) updatedConfig.agents.list = [];
-      
-      const agentIndex = updatedConfig.agents.list.findIndex((a: any) => a.id === agentId);
-      if (agentIndex >= 0) {
-        updatedConfig.agents.list[agentIndex] = {
-          ...updatedConfig.agents.list[agentIndex],
-          model: model === 'default' ? null : model,
-        };
-      } else {
-        // Agent not in config, add it
-        updatedConfig.agents.list.push({
-          id: agentId,
-          model: model === 'default' ? null : model,
-        });
+      // Use session_status-style model override via the gateway API proxy
+      // This avoids rewriting the full config and is safer
+      const res = await fetch("/api/gateway", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method: "session.status",
+          params: {
+            agentId,
+            model: model === "default" ? "default" : model,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `HTTP ${res.status}`);
       }
       
-      // Send patch request via WebSocket
-      await request<any>('config.patch', {
-        baseHash: currentConfig.baseHash,
-        raw: JSON.stringify(updatedConfig, null, 2),
-      });
-      
-      toast.success(`Model updated for ${agentId}`, {
-        description: `Set to ${model === 'default' ? 'default model' : model}. Gateway will restart.`,
+      toast.success(`Model override set for ${agentId}`, {
+        description: `Set to ${model === 'default' ? 'default model' : model}. Takes effect on next session.`,
       });
     } catch (error) {
       console.error('Failed to save model:', error);
-      toast.error('Failed to save model configuration');
+      toast.error('Failed to save model configuration', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
     } finally {
       setSaving(false);
     }
@@ -164,20 +157,21 @@ export default function SettingsPage() {
       return;
     }
 
-    try {
-      const res = await fetch("/api/gateway", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restart" }),
-      });
+    if (!connected) {
+      toast.error("Not connected to gateway");
+      return;
+    }
 
-      if (res.ok) {
-        toast.success("Gateway restart initiated");
-      } else {
-        toast.error("Failed to restart gateway");
-      }
+    try {
+      await request("gateway.restart");
+      toast.success("Gateway restart initiated", {
+        description: "The connection will drop momentarily and reconnect.",
+      });
     } catch (error) {
-      toast.error("Failed to restart gateway");
+      console.error("Gateway restart error:", error);
+      toast.error("Failed to restart gateway", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   };
 
@@ -323,14 +317,24 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <span className="text-zinc-400">WebSocket URL</span>
               <code className="text-sm bg-zinc-800 px-2 py-1 rounded text-zinc-200">
-                ws://127.0.0.1:18789
+                {gatewayUrl || "Not connected"}
               </code>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-zinc-400">Status</span>
-              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/50">
-                Connected
-              </Badge>
+              {connected ? (
+                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/50">
+                  Connected
+                </Badge>
+              ) : connecting ? (
+                <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50">
+                  Connecting...
+                </Badge>
+              ) : (
+                <Badge className="bg-red-500/20 text-red-400 border-red-500/50">
+                  Disconnected
+                </Badge>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <span className="text-zinc-400">Default Model</span>

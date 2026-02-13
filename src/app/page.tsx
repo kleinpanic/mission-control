@@ -163,7 +163,9 @@ export default function Dashboard() {
         setStatus({
           gateway: {
             status: "connected",
-            url: "ws://127.0.0.1:18789",
+            url: typeof window !== "undefined"
+              ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname}:18789`
+              : "ws://127.0.0.1:18789",
             uptime: undefined,
             version: undefined,
           },

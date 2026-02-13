@@ -7,6 +7,7 @@ import { Event } from "@/types";
 interface GatewayContextType {
   connected: boolean;
   connecting: boolean;
+  gatewayUrl: string | null;
   request: <T = any>(method: string, params?: Record<string, any>) => Promise<T>;
   subscribe: (event: string, handler: (payload: any) => void) => () => void;
 }
@@ -28,6 +29,7 @@ interface Props {
 export function GatewayProvider({ children }: Props) {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [gatewayUrl, setGatewayUrl] = useState<string | null>(null);
   
   const wsRef = useRef<WebSocket | null>(null);
   const pendingRef = useRef<Map<string, { resolve: (value: any) => void; reject: (error: any) => void; timer: NodeJS.Timeout }>>(new Map());
@@ -172,11 +174,12 @@ export function GatewayProvider({ children }: Props) {
       return "ws://127.0.0.1:18789";
     };
 
-    const gatewayUrl = getGatewayUrl();
-    console.log(`[Gateway] Connecting to ${gatewayUrl}...`);
+    const resolvedUrl = getGatewayUrl();
+    setGatewayUrl(resolvedUrl);
+    console.log(`[Gateway] Connecting to ${resolvedUrl}...`);
     
     try {
-      const ws = new WebSocket(gatewayUrl);
+      const ws = new WebSocket(resolvedUrl);
       wsRef.current = ws;
       
       ws.onopen = () => {
@@ -313,6 +316,7 @@ export function GatewayProvider({ children }: Props) {
   const value: GatewayContextType = {
     connected,
     connecting,
+    gatewayUrl,
     request,
     subscribe,
   };
