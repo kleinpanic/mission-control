@@ -31,23 +31,25 @@ export default function AgentsPage() {
         request<any>("status").catch(e => { console.error("status error:", e); return null; }),
       ]);
       
-      if (agentsResult && statusResult) {
+      if (agentsResult || statusResult) {
         // Build a map of agent sessions from status
         const sessionsByAgent = new Map<string, any[]>();
         const heartbeatByAgent = new Map<string, any>();
         
-        // Map sessions by agent
-        statusResult.sessions?.byAgent?.forEach((agentSessions: any) => {
-          sessionsByAgent.set(agentSessions.agentId, agentSessions.recent || []);
-        });
-        
-        // Map heartbeat info by agent
-        statusResult.heartbeat?.agents?.forEach((hb: any) => {
-          heartbeatByAgent.set(hb.agentId, hb);
-        });
+        if (statusResult) {
+          // Map sessions by agent
+          statusResult.sessions?.byAgent?.forEach((agentSessions: any) => {
+            sessionsByAgent.set(agentSessions.agentId, agentSessions.recent || []);
+          });
+          
+          // Map heartbeat info by agent
+          statusResult.heartbeat?.agents?.forEach((hb: any) => {
+            heartbeatByAgent.set(hb.agentId, hb);
+          });
+        }
         
         // Transform agents response to expected format
-        const fetchedAgents: Agent[] = (agentsResult.agents || []).map((agent: any) => {
+        const fetchedAgents: Agent[] = (agentsResult?.agents || DEFAULT_AGENTS).map((agent: any) => {
           const sessions = sessionsByAgent.get(agent.id) || [];
           const heartbeat = heartbeatByAgent.get(agent.id);
           
@@ -79,13 +81,13 @@ export default function AgentsPage() {
           }
           
           // Get next heartbeat
-          const nextHeartbeat = statusResult.heartbeat?.next?.find((hb: any) => hb.agentId === agent.id);
+          const nextHeartbeat = statusResult?.heartbeat?.next?.find((hb: any) => hb.agentId === agent.id);
           
           return {
             id: agent.id,
             name: agent.name || agent.id,
             status,
-            model: mostRecentSession?.model || null,
+            model: mostRecentSession?.model || agent.model || null,
             lastActivity,
             activeSession: mostRecentSession?.key || null,
             heartbeatNext: nextHeartbeat?.nextIn || null,
