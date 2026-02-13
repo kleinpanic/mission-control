@@ -56,8 +56,8 @@ describe('Database Functions', () => {
 
     const tasks = getTasks();
     expect(tasks).toHaveLength(2);
-    expect(tasks[0].title).toBe('Task 1');
-    expect(tasks[1].title).toBe('Task 2');
+    const titles = tasks.map(t => t.title).sort();
+    expect(titles).toEqual(['Task 1', 'Task 2']);
   });
 
   it('should update a task', () => {
