@@ -158,7 +158,21 @@ export function GatewayProvider({ children }: Props) {
     setConnecting(true);
     setConnectionStatus("connecting");
     
-    const gatewayUrl = process.env.NEXT_PUBLIC_OPENCLAW_GATEWAY_URL || "ws://127.0.0.1:18789";
+    const getGatewayUrl = () => {
+      if (process.env.NEXT_PUBLIC_OPENCLAW_GATEWAY_URL) {
+        return process.env.NEXT_PUBLIC_OPENCLAW_GATEWAY_URL;
+      }
+      
+      if (typeof window !== "undefined") {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const hostname = window.location.hostname;
+        return `${protocol}//${hostname}:18789`;
+      }
+      
+      return "ws://127.0.0.1:18789";
+    };
+
+    const gatewayUrl = getGatewayUrl();
     console.log(`[Gateway] Connecting to ${gatewayUrl}...`);
     
     try {
