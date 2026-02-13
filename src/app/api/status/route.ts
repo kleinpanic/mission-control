@@ -64,8 +64,18 @@ function formatDuration(ms: number): string {
   return `${Math.round(ms / 3600000)}h`;
 }
 
+// Cache for 10 seconds to improve performance
+let statusCache: any = null;
+let statusCacheTime = 0;
+const STATUS_CACHE_TTL = 10000;
+
 export async function GET() {
   try {
+    const now = Date.now();
+    if (statusCache && (now - statusCacheTime) < STATUS_CACHE_TTL) {
+      return NextResponse.json(statusCache);
+    }
+
     // Get OpenClaw status
     const { stdout: statusJson } = await execAsync(
       'openclaw status --json 2>/dev/null | grep -v "^\\[" | head -500'
@@ -81,8 +91,6 @@ export async function GET() {
     } catch (parseError) {
       console.error("Failed to parse status JSON:", parseError);
     }
-
-    const now = Date.now();
 
     // Build agents info
     const heartbeatAgents = statusData.heartbeat?.agents || [];
@@ -190,6 +198,10 @@ export async function GET() {
       },
       channels: statusData.channelSummary || [],
     };
+
+    // Update cache
+    statusCache = response;
+    statusCacheTime = now;
 
     return NextResponse.json(response);
   } catch (error) {
