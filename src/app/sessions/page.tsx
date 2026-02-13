@@ -5,6 +5,7 @@ import { useSessionsStore } from "@/stores/sessions";
 import { Session } from "@/types";
 import { SessionTable } from "@/components/sessions/SessionTable";
 import { SessionDetail } from "@/components/sessions/SessionDetail";
+import { CompactionPolicies } from "@/components/sessions/CompactionPolicies";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw, Wifi, WifiOff, Loader2 } from "lucide-react";
@@ -135,6 +136,9 @@ export default function SessionsPage() {
           Not connected to gateway. Session actions are disabled.
         </div>
       )}
+
+      {/* Compaction Policies */}
+      <CompactionPolicies sessions={sessions} onRefresh={fetchSessions} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className={selectedSession ? "lg:col-span-2" : "lg:col-span-3"}>
