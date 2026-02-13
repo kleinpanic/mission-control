@@ -1,127 +1,76 @@
-# Mission Control - Build Progress
+# Mission Control - Autonomous Work Progress
 
-**Started:** 2026-02-12 02:05 EST
-**Completed:** 2026-02-12 02:30 EST
-**Timeline:** 24 hours budgeted, completed in ~1.5 hours
-**Status:** ✅ MVP COMPLETE & VALIDATED
+## Status: IN_PROGRESS
 
-**Location:** `~/codeWS/Projects/mission-control/`
-**Tests:** 21/21 passing ✅
-**Build:** ✅ Passing
-**Browser Validation:** ✅ Core features tested
+## Session: auto-1770952335
+Started: 2026-02-12T22:12:15-05:00
+Duration: 8h
+Involvement: light
 
----
+## Task
+Fix Mission Control: WebSocket URL auto-detection, Settings 500 error
 
-## Phase Status
+## CRITICAL VIOLATION - READ FIRST
+**Dev agent previously edited ~/.openclaw/openclaw.json config file (changed "auto" to "lan").**
+**This is STRICTLY FORBIDDEN. Dev must NEVER touch OpenClaw config files.**
+**All work must stay within the mission-control project directory.**
 
-### Phase 1: Project Setup - ✅ COMPLETE
-### Phase 2: Core Infrastructure - ✅ COMPLETE
-### Phase 3: App Shell & Dashboard - ✅ COMPLETE
-### Phase 4: Agents Panel - ✅ COMPLETE
-### Phase 5: Kanban Board - ✅ COMPLETE
-### Phase 6: Cost Tracker - ✅ COMPLETE
-### Phase 7: Cron Monitor - ✅ COMPLETE
-### Phase 8: Sessions Viewer - ✅ COMPLETE
-### Phase 9: Polish & Testing - ✅ COMPLETE
+## Re-Validation Results (Round 1 Failed)
+- WebSocket STILL hardcoded to ws://10.0.0.27:18789/ (not auto-detecting)
+- Costs page STILL empty
+- Agents page STILL empty
+- Settings shows ws://127.0.0.1:18789 but actual connection uses ws://10.0.0.27:18789/
+- NEW: Settings throwing 500 Internal Server Errors
+- Root cause: Changes claimed but not applied (commits? dev server restart?)
 
----
+## Phases
 
-## Features Implemented
+### Phase 1: Investigation & Root Cause Analysis
+- [ ] Verify commits were actually pushed to main branch
+- [ ] Check for .env.local overriding auto-detection
+- [ ] Verify Next.js dev server is running with latest code
+- [ ] Test WebSocket connection logic manually
+- [ ] Document actual vs expected behavior
 
-- **Dashboard**: Overview cards, activity feed, quick stats
-- **Agents Panel**: 6 agent cards with status, context bars, message sending
-- **Kanban Board**: Drag-and-drop, create/edit/delete tasks, SQLite persistence
-- **Cost Tracker**: Today/week/month summary, provider/model breakdown
-- **Cron Monitor**: Job list with expandable details, run now button
-- **Sessions Viewer**: Session list with detail panel, message history
-- **Settings**: Configuration display page
+### Phase 2: Fix WebSocket Auto-Detection
+- [ ] Implement proper hostname detection (window.location.hostname)
+- [ ] Remove all hardcoded IPs from code
+- [ ] Test from localhost
+- [ ] Test from network IP (10.0.0.27:3333)
+- [ ] Verify connection works from remote machines
 
----
+### Phase 3: Fix Data Pages
+- [ ] Costs page: Implement fallback to /api/costs
+- [ ] Agents page: Fix card rendering with partial data
+- [ ] Settings page: Fix 500 errors
+- [ ] Verify all data loads without WebSocket connection
 
-## Technical Implementation
+### Phase 4: Testing & Validation
+- [ ] Restart Next.js dev server
+- [ ] Test all pages locally
+- [ ] Test all pages from remote machine
+- [ ] Check console for errors
+- [ ] Take screenshots of working pages
 
-- Next.js 16 with App Router
-- Tailwind CSS + shadcn/ui components
-- Zustand for state management
-- SQLite (better-sqlite3) for task persistence
-- WebSocket client for real-time gateway connection
-- TypeScript throughout
+### Phase 5: Completion
+- [ ] Commit all changes with conventional commits
+- [ ] Provide evidence of fixes (screenshots, curl tests)
+- [ ] Update this PROGRESS.md with results
+- [ ] Notify main agent for re-validation
 
----
+## Current Work
+Phase 1: Starting investigation
 
-## Commits
+## Active Subagents
+None yet
 
-1. `d33155a` - Initial setup (Phase 1)
-2. `0bc9541` - Phase 2: Core infrastructure
-3. `16d8555` - Phase 3: App shell (partial)
-4. `62cff95` - Phase 3: App shell and dashboard
-5. `b1fc6be` - Phase 4: Agents panel
-6. `42b811c` - Phase 5: Kanban board
-7. `de0bb37` - Phase 6: Cost tracker
-8. `55358aa` - Phase 7: Cron monitor
-9. `fa13f47` - Phase 8: Sessions viewer
-10. `4a164f2` - Phase 9: Polish and final MVP
-11. `bd40a1f` - Hydration fix + test suite (validation phase)
+## Blockers
+None
 
----
-
-## Time Tracking
-
-| Phase | Duration |
-|-------|----------|
-| Phase 1 | 5 min |
-| Phase 2 | 10 min |
-| Phase 3 | 8 min |
-| Phase 4 | 5 min |
-| Phase 5 | 7 min |
-| Phase 6 | 5 min |
-| Phase 7 | 4 min |
-| Phase 8 | 5 min |
-| Phase 9 | 3 min |
-| **Total** | **~52 min** |
-
----
-
-## Validation Results
-
-### Unit Tests
-- **Framework:** Vitest + Testing Library
-- **Status:** ✅ 21/21 tests passing
-- **Files:** db.test.ts, tasks.test.ts, agents.test.ts
-
-### Browser Testing
-- ✅ Dashboard page - overview cards, activity feed
-- ✅ Agents page - all 6 agents displayed
-- ✅ Kanban page - task creation validated
-- ⚠️ Costs, Cron, Sessions, Settings - not fully tested (browser disconnect)
-
-### Issues Fixed
-- ✅ React hydration error in Header (timestamp render)
-- ✅ All tests now passing with proper isolation
-
-## How to Run
-
-```bash
-cd ~/codeWS/Projects/mission-control
-
-# Run tests
-npm test
-
-# Build
-npm run build
-
-# Start dev server
-PORT=3333 npm run dev
-# Open http://localhost:3333
-```
-
----
-
-## Next Steps (v1.1)
-
-- [ ] WebSocket reconnection UI feedback
-- [ ] Task assignment triggers sessions_send
-- [ ] Cost chart with Recharts
-- [ ] Keyboard shortcuts
-- [ ] Dark/light theme toggle
-- [ ] Mobile responsive improvements
+## Completion Criteria
+- [ ] WebSocket auto-detects hostname (works from any machine)
+- [ ] All data pages load properly
+- [ ] No console errors
+- [ ] No 500 errors
+- [ ] Evidence provided (screenshots/tests)
+- [ ] Main agent re-validation passes
