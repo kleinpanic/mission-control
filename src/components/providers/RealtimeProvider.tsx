@@ -139,7 +139,7 @@ export function RealtimeProvider({ children }: Props) {
   const fetchInitialData = async () => {
     try {
       // Fetch sessions
-      const sessionsResult = await sendMessage("sessions.list", { messageLimit: 0 });
+      const sessionsResult = await sendMessage("sessions.list", { limit: 50 });
       if (sessionsResult?.sessions) {
         setSessions(sessionsResult.sessions);
 
