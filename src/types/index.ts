@@ -126,6 +126,7 @@ export interface Task {
   parentId?: string | null;
   projectId?: string | null;
   source?: string;
+  recommendedModel?: string | null;
 }
 
 // ===== Cost Types =====
