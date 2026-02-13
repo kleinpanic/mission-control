@@ -166,9 +166,19 @@ export function GatewayProvider({ children }: Props) {
       }
       
       if (typeof window !== "undefined") {
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         const hostname = window.location.hostname;
-        return `${protocol}//${hostname}:18789`;
+        const isLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+        
+        if (isLocal) {
+          // Direct connection when on the same machine
+          return "ws://127.0.0.1:18789";
+        }
+        
+        // Use the WS proxy endpoint when accessed remotely (LAN/WAN).
+        // The custom server proxies /api/gateway/ws -> localhost:18789.
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const port = window.location.port;
+        return `${protocol}//${hostname}${port ? `:${port}` : ""}/api/gateway/ws`;
       }
       
       return "ws://127.0.0.1:18789";

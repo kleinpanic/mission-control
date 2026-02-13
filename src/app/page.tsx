@@ -164,7 +164,9 @@ export default function Dashboard() {
           gateway: {
             status: "connected",
             url: typeof window !== "undefined"
-              ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname}:18789`
+              ? (["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
+                ? "ws://127.0.0.1:18789"
+                : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname}:${window.location.port}/api/gateway/ws`)
               : "ws://127.0.0.1:18789",
             uptime: undefined,
             version: undefined,
