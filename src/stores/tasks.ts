@@ -1,4 +1,4 @@
-// Mission Control - Tasks Store (Kanban)
+// Mission Control - Tasks Store (Kanban — shared with oc-tasks)
 import { create } from 'zustand';
 import { Task, TaskStatus } from '@/types';
 
@@ -49,6 +49,7 @@ export const useTasksStore = create<TasksState>((set) => ({
               ...task,
               status: newStatus,
               updatedAt: new Date().toISOString(),
+              statusChangedAt: new Date().toISOString(),
               completedAt: newStatus === 'completed' ? new Date().toISOString() : task.completedAt,
             }
           : task

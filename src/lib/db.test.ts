@@ -1,7 +1,53 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import { getDb, createTask, getTasks, updateTask, deleteTask, closeDb } from './db';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { unlinkSync } from 'fs';
+
+const TEST_DB_PATH = join(tmpdir(), `mc-test-${process.pid}.db`);
 
 describe('Database Functions', () => {
+  beforeAll(() => {
+    process.env.TASKS_DB_PATH = TEST_DB_PATH;
+    // Init schema for test database
+    const db = getDb();
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'intake',
+        priority TEXT NOT NULL DEFAULT 'medium',
+        complexity TEXT NOT NULL DEFAULT 'simple',
+        danger TEXT NOT NULL DEFAULT 'safe',
+        type TEXT NOT NULL DEFAULT 'manual',
+        assignedTo TEXT,
+        list TEXT NOT NULL DEFAULT 'agents',
+        tags TEXT DEFAULT '[]',
+        detailScore INTEGER DEFAULT 0,
+        minDetailRequired INTEGER DEFAULT 0,
+        autoBackburnered INTEGER DEFAULT 0,
+        blockedBy TEXT DEFAULT '[]',
+        blockerDescription TEXT DEFAULT '',
+        dueDate TEXT,
+        slaBreached INTEGER DEFAULT 0,
+        estimatedMinutes INTEGER,
+        actualMinutes INTEGER DEFAULT 0,
+        reminderId TEXT,
+        reminderList TEXT,
+        reminderSyncedAt TEXT,
+        parentId TEXT,
+        projectId TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        completedAt TEXT,
+        statusChangedAt TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'ui',
+        metadata TEXT DEFAULT '{}'
+      )
+    `);
+  });
+
   beforeEach(() => {
     // Clear all tasks before each test
     const db = getDb();
@@ -15,11 +61,19 @@ describe('Database Functions', () => {
     closeDb();
   });
 
+  afterAll(() => {
+    closeDb();
+    try { unlinkSync(TEST_DB_PATH); } catch {}
+    try { unlinkSync(TEST_DB_PATH + '-wal'); } catch {}
+    try { unlinkSync(TEST_DB_PATH + '-shm'); } catch {}
+    delete process.env.TASKS_DB_PATH;
+  });
+
   it('should create a task', () => {
     const task = createTask({
       title: 'Test Task',
       description: 'Test Description',
-      status: 'queue',
+      status: 'intake',
       priority: 'medium',
       type: 'manual',
       assignedTo: null,
@@ -29,7 +83,7 @@ describe('Database Functions', () => {
     expect(task).toBeDefined();
     expect(task.id).toBeDefined();
     expect(task.title).toBe('Test Task');
-    expect(task.status).toBe('queue');
+    expect(task.status).toBe('intake');
     expect(task.priority).toBe('medium');
     expect(task.tags).toEqual(['test']);
   });
@@ -38,7 +92,7 @@ describe('Database Functions', () => {
     // Create multiple tasks
     createTask({
       title: 'Task 1',
-      status: 'queue',
+      status: 'intake',
       priority: 'high',
       type: 'manual',
       assignedTo: null,
@@ -47,7 +101,7 @@ describe('Database Functions', () => {
 
     createTask({
       title: 'Task 2',
-      status: 'inProgress',
+      status: 'in_progress',
       priority: 'low',
       type: 'auto',
       assignedTo: 'dev',
@@ -63,7 +117,7 @@ describe('Database Functions', () => {
   it('should update a task', () => {
     const task = createTask({
       title: 'Original Title',
-      status: 'queue',
+      status: 'intake',
       priority: 'medium',
       type: 'manual',
       assignedTo: null,
@@ -72,13 +126,13 @@ describe('Database Functions', () => {
 
     const updated = updateTask(task.id, {
       title: 'Updated Title',
-      status: 'inProgress',
+      status: 'in_progress',
       priority: 'high',
     });
 
     expect(updated).toBeDefined();
     expect(updated!.title).toBe('Updated Title');
-    expect(updated!.status).toBe('inProgress');
+    expect(updated!.status).toBe('in_progress');
     expect(updated!.priority).toBe('high');
     expect(updated!.id).toBe(task.id);
   });
@@ -86,7 +140,7 @@ describe('Database Functions', () => {
   it('should delete a task', () => {
     const task = createTask({
       title: 'To Delete',
-      status: 'queue',
+      status: 'intake',
       priority: 'medium',
       type: 'manual',
       assignedTo: null,
@@ -113,7 +167,7 @@ describe('Database Functions', () => {
   it('should preserve tags array on create', () => {
     const task = createTask({
       title: 'Tagged Task',
-      status: 'queue',
+      status: 'intake',
       priority: 'medium',
       type: 'manual',
       assignedTo: null,
@@ -126,7 +180,7 @@ describe('Database Functions', () => {
   it('should handle empty description', () => {
     const task = createTask({
       title: 'No Description',
-      status: 'queue',
+      status: 'intake',
       priority: 'low',
       type: 'manual',
       assignedTo: null,

@@ -18,7 +18,7 @@ describe('Tasks Store', () => {
       {
         id: '1',
         title: 'Task 1',
-        status: 'queue',
+        status: 'intake',
         priority: 'high',
         type: 'manual',
         assignedTo: null,
@@ -29,7 +29,7 @@ describe('Tasks Store', () => {
       {
         id: '2',
         title: 'Task 2',
-        status: 'inProgress',
+        status: 'in_progress',
         priority: 'medium',
         type: 'auto',
         assignedTo: 'dev',
@@ -49,7 +49,7 @@ describe('Tasks Store', () => {
     const newTask: Task = {
       id: '1',
       title: 'New Task',
-      status: 'queue',
+      status: 'intake',
       priority: 'low',
       type: 'manual',
       assignedTo: null,
@@ -68,7 +68,7 @@ describe('Tasks Store', () => {
     const initialTask: Task = {
       id: '1',
       title: 'Original',
-      status: 'queue',
+      status: 'intake',
       priority: 'medium',
       type: 'manual',
       assignedTo: null,
@@ -81,7 +81,7 @@ describe('Tasks Store', () => {
 
     const updates = {
       title: 'Updated',
-      status: 'inProgress' as const,
+      status: 'in_progress' as const,
       priority: 'high' as const,
     };
 
@@ -89,7 +89,7 @@ describe('Tasks Store', () => {
     const { tasks } = useTasksStore.getState();
 
     expect(tasks[0].title).toBe('Updated');
-    expect(tasks[0].status).toBe('inProgress');
+    expect(tasks[0].status).toBe('in_progress');
     expect(tasks[0].priority).toBe('high');
     expect(tasks[0].id).toBe('1');
   });
@@ -98,7 +98,7 @@ describe('Tasks Store', () => {
     const task1: Task = {
       id: '1',
       title: 'Task 1',
-      status: 'queue',
+      status: 'intake',
       priority: 'medium',
       type: 'manual',
       assignedTo: null,
@@ -110,7 +110,7 @@ describe('Tasks Store', () => {
     const task2: Task = {
       id: '2',
       title: 'Task 2',
-      status: 'queue',
+      status: 'intake',
       priority: 'medium',
       type: 'manual',
       assignedTo: null,
@@ -131,7 +131,7 @@ describe('Tasks Store', () => {
     const task: Task = {
       id: '1',
       title: 'Task',
-      status: 'queue',
+      status: 'intake',
       priority: 'medium',
       type: 'manual',
       assignedTo: null,
@@ -151,7 +151,7 @@ describe('Tasks Store', () => {
     const task: Task = {
       id: '1',
       title: 'Task',
-      status: 'queue',
+      status: 'intake',
       priority: 'medium',
       type: 'manual',
       assignedTo: null,

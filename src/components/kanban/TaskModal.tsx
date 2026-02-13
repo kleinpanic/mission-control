@@ -20,7 +20,7 @@ interface TaskModalProps {
   task?: Task | null;
 }
 
-const DEFAULT_AGENTS = ["main", "dev", "ops", "school", "research", "meta"];
+const DEFAULT_AGENTS = ["main", "dev", "ops", "school", "research", "meta", "taskmaster"];
 
 export function TaskModal({ open, onClose, onSubmit, task }: TaskModalProps) {
   const [title, setTitle] = useState("");
@@ -53,7 +53,7 @@ export function TaskModal({ open, onClose, onSubmit, task }: TaskModalProps) {
     onSubmit({
       title,
       description: description || undefined,
-      status: task?.status || "queue",
+      status: task?.status || "intake",
       priority,
       type,
       assignedTo: assignedTo || null,
@@ -104,6 +104,7 @@ export function TaskModal({ open, onClose, onSubmit, task }: TaskModalProps) {
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
+                <option value="critical">Critical</option>
               </select>
             </div>
 
@@ -117,6 +118,7 @@ export function TaskModal({ open, onClose, onSubmit, task }: TaskModalProps) {
               >
                 <option value="manual">Manual</option>
                 <option value="auto">Auto</option>
+                <option value="sync">Sync</option>
               </select>
             </div>
           </div>

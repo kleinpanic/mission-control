@@ -1,44 +1,25 @@
-// Mission Control - SQLite Database
+// Mission Control - SQLite Database (Shared with oc-tasks)
 import Database from 'better-sqlite3';
 import { join } from 'path';
+import { homedir } from 'os';
 import { Task, TaskStatus, TaskPriority, TaskType } from '@/types';
 
-const DB_PATH = join(process.cwd(), 'data', 'tasks.db');
+// Use shared database — single source of truth for all task systems
+function getDbPath(): string {
+  return process.env.TASKS_DB_PATH
+    || join(homedir(), '.openclaw', 'data', 'tasks.db');
+}
 
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!db) {
-    db = new Database(DB_PATH);
+    db = new Database(getDbPath());
     db.pragma('journal_mode = WAL');
-    initSchema();
+    db.pragma('foreign_keys = ON');
+    db.pragma('busy_timeout = 5000');
   }
   return db;
-}
-
-function initSchema() {
-  if (!db) return;
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      description TEXT,
-      status TEXT NOT NULL CHECK(status IN ('queue', 'inProgress', 'completed')),
-      priority TEXT NOT NULL CHECK(priority IN ('low', 'medium', 'high')),
-      type TEXT NOT NULL CHECK(type IN ('manual', 'auto')),
-      assignedTo TEXT,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      completedAt TEXT,
-      tags TEXT NOT NULL,
-      metadata TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-    CREATE INDEX IF NOT EXISTS idx_tasks_assignedTo ON tasks(assignedTo);
-    CREATE INDEX IF NOT EXISTS idx_tasks_createdAt ON tasks(createdAt DESC);
-  `);
 }
 
 // ===== CRUD Operations =====
@@ -53,43 +34,92 @@ export function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): 
     id,
     createdAt: now,
     updatedAt: now,
+    statusChangedAt: now,
+    detailScore: 0,
+    minDetailRequired: 0,
+    autoBackburnered: false,
+    slaBreached: false,
+    blockedBy: [],
+    blockerDescription: '',
+    actualMinutes: 0,
+    source: 'ui',
   };
 
   const stmt = db.prepare(`
-    INSERT INTO tasks (id, title, description, status, priority, type, assignedTo, createdAt, updatedAt, completedAt, tags, metadata)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tasks (
+      id, title, description, status, priority, complexity, danger, type,
+      assignedTo, list, tags, detailScore, minDetailRequired, autoBackburnered,
+      blockedBy, blockerDescription, dueDate, slaBreached,
+      estimatedMinutes, actualMinutes, reminderId, reminderList, reminderSyncedAt,
+      parentId, projectId, createdAt, updatedAt, completedAt, statusChangedAt,
+      source, metadata
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?,
+      ?, ?
+    )
   `);
 
   stmt.run(
     newTask.id,
     newTask.title,
-    newTask.description || null,
+    newTask.description || '',
     newTask.status,
     newTask.priority,
+    newTask.complexity || 'simple',
+    newTask.danger || 'safe',
     newTask.type,
     newTask.assignedTo || null,
+    newTask.list || 'agents',
+    JSON.stringify(newTask.tags),
+    newTask.detailScore,
+    newTask.minDetailRequired,
+    newTask.autoBackburnered ? 1 : 0,
+    JSON.stringify(newTask.blockedBy),
+    newTask.blockerDescription || '',
+    newTask.dueDate || null,
+    newTask.slaBreached ? 1 : 0,
+    newTask.estimatedMinutes || null,
+    newTask.actualMinutes || 0,
+    null, null, null,
+    newTask.parentId || null,
+    newTask.projectId || null,
     newTask.createdAt,
     newTask.updatedAt,
     newTask.completedAt || null,
-    JSON.stringify(newTask.tags),
-    newTask.metadata ? JSON.stringify(newTask.metadata) : null
+    newTask.statusChangedAt,
+    newTask.source || 'ui',
+    newTask.metadata ? JSON.stringify(newTask.metadata) : '{}'
   );
 
   return newTask;
 }
 
 export function getTasks(filters?: {
-  status?: TaskStatus;
+  status?: TaskStatus | TaskStatus[];
   assignedTo?: string;
   type?: TaskType;
+  priority?: TaskPriority;
+  list?: string;
+  tag?: string;
+  backburnered?: boolean;
+  sort?: string;
 }): Task[] {
   const db = getDb();
   let query = 'SELECT * FROM tasks WHERE 1=1';
   const params: any[] = [];
 
   if (filters?.status) {
-    query += ' AND status = ?';
-    params.push(filters.status);
+    if (Array.isArray(filters.status)) {
+      query += ` AND status IN (${filters.status.map(() => '?').join(',')})`;
+      params.push(...filters.status);
+    } else {
+      query += ' AND status = ?';
+      params.push(filters.status);
+    }
   }
 
   if (filters?.assignedTo) {
@@ -102,7 +132,43 @@ export function getTasks(filters?: {
     params.push(filters.type);
   }
 
-  query += ' ORDER BY createdAt DESC';
+  if (filters?.priority) {
+    query += ' AND priority = ?';
+    params.push(filters.priority);
+  }
+
+  if (filters?.list) {
+    query += ' AND list = ?';
+    params.push(filters.list);
+  }
+
+  if (filters?.tag) {
+    query += ' AND tags LIKE ?';
+    params.push(`%"${filters.tag}"%`);
+  }
+
+  if (filters?.backburnered !== undefined) {
+    query += ' AND autoBackburnered = ?';
+    params.push(filters.backburnered ? 1 : 0);
+  }
+
+  // Sort
+  switch (filters?.sort) {
+    case 'priority':
+      query += ` ORDER BY
+        CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
+        createdAt DESC`;
+      break;
+    case 'due':
+      query += ' ORDER BY dueDate IS NULL, dueDate ASC, createdAt DESC';
+      break;
+    case 'updated':
+      query += ' ORDER BY updatedAt DESC';
+      break;
+    default:
+      query += ' ORDER BY createdAt DESC';
+      break;
+  }
 
   const stmt = db.prepare(query);
   const rows = stmt.all(...params) as any[];
@@ -123,32 +189,53 @@ export function updateTask(id: string, updates: Partial<Task>): Task | null {
   const existing = getTask(id);
   if (!existing) return null;
 
+  const now = new Date().toISOString();
   const updated: Task = {
     ...existing,
     ...updates,
-    id: existing.id, // Prevent ID change
-    createdAt: existing.createdAt, // Prevent createdAt change
-    updatedAt: new Date().toISOString(),
+    id: existing.id,
+    createdAt: existing.createdAt,
+    updatedAt: now,
   };
+
+  // Track status change
+  if (updates.status && updates.status !== existing.status) {
+    updated.statusChangedAt = now;
+    if (updates.status === 'completed') {
+      updated.completedAt = now;
+    }
+  }
 
   const stmt = db.prepare(`
     UPDATE tasks
-    SET title = ?, description = ?, status = ?, priority = ?, type = ?,
-        assignedTo = ?, updatedAt = ?, completedAt = ?, tags = ?, metadata = ?
+    SET title = ?, description = ?, status = ?, priority = ?, complexity = ?,
+        danger = ?, type = ?, assignedTo = ?, list = ?, updatedAt = ?,
+        completedAt = ?, statusChangedAt = ?, tags = ?, metadata = ?,
+        dueDate = ?, estimatedMinutes = ?, parentId = ?, projectId = ?,
+        blockerDescription = ?
     WHERE id = ?
   `);
 
   stmt.run(
     updated.title,
-    updated.description || null,
+    updated.description || '',
     updated.status,
     updated.priority,
+    updated.complexity || 'simple',
+    updated.danger || 'safe',
     updated.type,
     updated.assignedTo || null,
+    updated.list || 'agents',
     updated.updatedAt,
     updated.completedAt || null,
+    updated.statusChangedAt || now,
     JSON.stringify(updated.tags),
-    updated.metadata ? JSON.stringify(updated.metadata) : null,
+    updated.metadata ? JSON.stringify(updated.metadata) : '{}',
+    updated.dueDate || null,
+    updated.estimatedMinutes || null,
+    updated.parentId || null,
+    updated.projectId || null,
+    updated.blockerDescription || '',
     id
   );
 
@@ -171,13 +258,29 @@ function rowToTask(row: any): Task {
     description: row.description || undefined,
     status: row.status as TaskStatus,
     priority: row.priority as TaskPriority,
+    complexity: row.complexity || 'simple',
+    danger: row.danger || 'safe',
     type: row.type as TaskType,
     assignedTo: row.assignedTo || null,
+    list: row.list || 'agents',
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     completedAt: row.completedAt || undefined,
-    tags: JSON.parse(row.tags) as string[],
+    statusChangedAt: row.statusChangedAt || row.updatedAt,
+    tags: JSON.parse(row.tags || '[]') as string[],
     metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+    detailScore: row.detailScore || 0,
+    minDetailRequired: row.minDetailRequired || 0,
+    autoBackburnered: !!row.autoBackburnered,
+    slaBreached: !!row.slaBreached,
+    blockedBy: JSON.parse(row.blockedBy || '[]'),
+    blockerDescription: row.blockerDescription || '',
+    dueDate: row.dueDate || null,
+    estimatedMinutes: row.estimatedMinutes || null,
+    actualMinutes: row.actualMinutes || 0,
+    parentId: row.parentId || null,
+    projectId: row.projectId || null,
+    source: row.source || 'ui',
   };
 }
 

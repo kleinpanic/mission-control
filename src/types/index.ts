@@ -89,11 +89,13 @@ export interface CronJob {
   enabled: boolean;
 }
 
-// ===== Task Types (Kanban) =====
+// ===== Task Types (Kanban — shared with oc-tasks) =====
 
-export type TaskStatus = 'queue' | 'inProgress' | 'completed';
-export type TaskPriority = 'low' | 'medium' | 'high';
-export type TaskType = 'manual' | 'auto';
+export type TaskStatus = 'intake' | 'ready' | 'backlog' | 'in_progress' | 'review' | 'blocked' | 'completed' | 'archived';
+export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
+export type TaskComplexity = 'trivial' | 'simple' | 'moderate' | 'complex' | 'epic';
+export type TaskDanger = 'safe' | 'low' | 'medium' | 'high' | 'critical';
+export type TaskType = 'manual' | 'auto' | 'sync';
 
 export interface Task {
   id: string;
@@ -101,13 +103,29 @@ export interface Task {
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
+  complexity?: TaskComplexity;
+  danger?: TaskDanger;
   type: TaskType;
-  assignedTo: string | null; // agentId
+  assignedTo: string | null;
+  list?: string;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+  statusChangedAt?: string;
   tags: string[];
   metadata?: Record<string, any>;
+  detailScore?: number;
+  minDetailRequired?: number;
+  autoBackburnered?: boolean;
+  slaBreached?: boolean;
+  blockedBy?: string[];
+  blockerDescription?: string;
+  dueDate?: string | null;
+  estimatedMinutes?: number | null;
+  actualMinutes?: number;
+  parentId?: string | null;
+  projectId?: string | null;
+  source?: string;
 }
 
 // ===== Cost Types =====
