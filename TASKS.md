@@ -66,6 +66,6 @@
 ## Next Steps (Future)
 - [ ] Add compact/prune automation policies
 - [ ] Add session compaction scheduling
-- [ ] Add model usage alerts
-- [ ] Add cost budget thresholds
-- [ ] Enhance realtime event filtering
+- [x] Add model usage alerts (ModelUsageAlerts component - flags disproportionate spend + paid fallback)
+- [x] Add cost budget thresholds (BudgetAlerts component - configurable daily/weekly/monthly with localStorage)
+- [x] Enhance realtime event filtering (ActivityFeed filter by event type + agent)
