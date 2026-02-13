@@ -6,6 +6,8 @@ import { ProviderBreakdown } from "@/components/costs/ProviderBreakdown";
 import { CostTable } from "@/components/costs/CostTable";
 import { CostTrendChart } from "@/components/costs/CostTrendChart";
 import { ModelUsageChart } from "@/components/costs/ModelUsageChart";
+import { BudgetAlerts } from "@/components/costs/BudgetAlerts";
+import { ModelUsageAlerts } from "@/components/costs/ModelUsageAlerts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -279,7 +281,20 @@ export default function CostsPage() {
         month={summary.month}
       />
 
-      {/* Cost Trend Chart (NEW) */}
+      {/* Budget Alerts & Model Usage Alerts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <BudgetAlerts
+          currentDaily={summary.today}
+          currentWeekly={summary.week}
+          currentMonthly={summary.month}
+        />
+        <ModelUsageAlerts
+          byModel={summary.byModel}
+          totalMonthly={summary.month}
+        />
+      </div>
+
+      {/* Cost Trend Chart */}
       {historyData && (
         <CostTrendChart
           daily={historyData.daily}
