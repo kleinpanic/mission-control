@@ -61,40 +61,47 @@ export default function CostsPage() {
     setLoading(true);
     setError(null);
     try {
-      // Fetch cost data via WebSocket
+      // Fetch cost data via WebSocket and history via HTTP
       const [costResult, historyResult] = await Promise.all([
         request<any>("usage.cost").catch(e => {
           console.error("usage.cost error:", e);
           return null;
         }),
-        // History might not be available via WebSocket, fall back to HTTP
         fetch("/api/costs/history").then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
 
-      if (costResult) {
-        console.log('[Costs] usage.cost response:', costResult);
+      // If WebSocket costResult is missing, try fetching from the internal API
+      let finalCostResult = costResult;
+      if (!finalCostResult) {
+        console.log('[Costs] WebSocket usage.cost failed, falling back to /api/costs');
+        finalCostResult = await fetch("/api/costs").then(r => r.ok ? r.json() : null).catch(() => null);
+      }
+
+      if (finalCostResult) {
+        console.log('[Costs] Data received:', finalCostResult);
         
-        // Transform the response to expected format
+        // Handle both raw codexbar format and aggregated format
+        const isAggregated = !!finalCostResult.summary;
+        const summary = isAggregated ? finalCostResult.summary : {
+          today: finalCostResult.today ?? 0,
+          week: finalCostResult.week ?? 0,
+          month: finalCostResult.month ?? 0,
+          byProvider: finalCostResult.byProvider ?? {},
+          byModel: finalCostResult.byModel ?? {},
+        };
+
         setData({
           summary: {
-            today: costResult.today ?? costResult.summary?.today ?? 0,
-            week: costResult.week ?? costResult.summary?.week ?? 0,
-            month: costResult.month ?? costResult.summary?.month ?? 0,
-            byProvider: costResult.byProvider ?? costResult.summary?.byProvider ?? {},
-            byModel: costResult.byModel ?? costResult.summary?.byModel ?? {},
+            today: summary.today ?? 0,
+            week: summary.week ?? 0,
+            month: summary.month ?? 0,
+            byProvider: summary.byProvider ?? {},
+            byModel: summary.byModel ?? {},
           },
-          raw: costResult.raw || costResult.entries || [],
-          billingAccount: costResult.billingAccount || costResult.account,
-          providers: costResult.providers || extractProviders(costResult),
+          raw: finalCostResult.raw || finalCostResult.entries || [],
+          billingAccount: finalCostResult.billingAccount || finalCostResult.account,
+          providers: finalCostResult.providers || extractProviders(finalCostResult),
         });
-        
-        console.log('[Costs] Transformed data:', {
-          today: costResult.today ?? costResult.summary?.today ?? 0,
-          week: costResult.week ?? costResult.summary?.week ?? 0,
-          month: costResult.month ?? costResult.summary?.month ?? 0,
-        });
-      } else {
-        console.warn('[Costs] usage.cost returned no data');
       }
 
       if (historyResult) {
