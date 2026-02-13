@@ -59,9 +59,19 @@ function formatRelativeTime(timestamp: string | null): string {
   return "Just now";
 }
 
-function formatHeartbeat(timestamp: string | null, overdue: boolean): string {
-  if (!timestamp) return "—";
-  const diff = new Date(timestamp).getTime() - Date.now();
+function formatHeartbeat(value: string | null, overdue: boolean): string {
+  if (!value) return "—";
+  
+  // If it's already a relative time like "5m", just return it
+  if (value.match(/^\d+[smh]$/)) {
+    return overdue ? `Overdue by ${value}` : value;
+  }
+
+  // Otherwise try to parse as date
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return value;
+
+  const diff = date.getTime() - Date.now();
   const minutes = Math.floor(diff / 60000);
 
   if (overdue || diff < 0) {
