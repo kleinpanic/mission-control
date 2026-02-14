@@ -33,17 +33,17 @@ export function Header() {
   };
 
   return (
-    <header className="h-16 border-b border-border bg-card px-6 flex items-center justify-between">
-      <div className="flex items-center gap-4">
-        <h2 className="text-lg font-semibold">Mission Control</h2>
-        <Badge variant="outline" className="gap-2">
+    <header className="h-14 md:h-16 border-b border-border bg-card px-3 md:px-6 flex items-center justify-between">
+      <div className="flex items-center gap-2 md:gap-4 ml-10 md:ml-0">
+        <h2 className="text-base md:text-lg font-semibold hidden sm:block">Mission Control</h2>
+        <Badge variant="outline" className="gap-1.5 md:gap-2 text-xs">
           <div className={cn('w-2 h-2 rounded-full', statusColors[connectionStatus])} />
-          {statusLabels[connectionStatus]}
+          <span className="hidden xs:inline">{statusLabels[connectionStatus]}</span>
         </Badge>
       </div>
 
-      <div className="flex items-center gap-4">
-        <span className="text-sm text-muted-foreground suppressHydrationWarning">
+      <div className="flex items-center gap-2 md:gap-4">
+        <span className="text-xs md:text-sm text-muted-foreground hidden sm:block" suppressHydrationWarning>
           {currentTime}
         </span>
       </div>

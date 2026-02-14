@@ -121,7 +121,7 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
         // Note: sessions.compact does not exist in the gateway API.
         // We use sessions.reset to clear high-usage sessions instead.
         // Compaction happens automatically during agent runs when context is near limit.
-        await request("sessions.reset", { sessionKey: session.key });
+        await request("sessions.reset", { key: session.key });
         reset++;
       } catch (err) {
         console.error(`[Compaction] Failed to reset session ${session.key}:`, err);
@@ -149,7 +149,7 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
     let failed = 0;
     for (const session of staleCandidates) {
       try {
-        await request("sessions.delete", { sessionKey: session.key });
+        await request("sessions.delete", { key: session.key });
         pruned++;
       } catch (err) {
         console.error(`[Prune] Failed to delete session ${session.key}:`, err);
