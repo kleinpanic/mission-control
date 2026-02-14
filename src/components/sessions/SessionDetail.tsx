@@ -28,7 +28,7 @@ export function SessionDetail({ session, onClose }: SessionDetailProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          method: "sessions.history",
+          method: "chat.history",
           params: { sessionKey: session.key, limit: 20 },
         }),
       });
@@ -48,12 +48,16 @@ export function SessionDetail({ session, onClose }: SessionDetailProps) {
 
     setSending(true);
     try {
+      // Extract agent ID from session key (e.g. "agent:dev:main" → "dev")
+      const parts = session.key.split(":");
+      const agentId = parts[1] || session.key;
+      
       await fetch("/api/gateway", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          method: "sessions.send",
-          params: { sessionKey: session.key, message: newMessage },
+          method: "send",
+          params: { to: agentId, message: newMessage, sessionKey: session.key },
         }),
       });
       setNewMessage("");

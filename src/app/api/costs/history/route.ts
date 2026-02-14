@@ -11,8 +11,15 @@ interface CostHistoryEntry {
   model?: string;
 }
 
+interface DailyDetail {
+  date: string;
+  totalCost: number;
+  modelBreakdowns: { modelName: string; cost: number; inputTokens?: number; outputTokens?: number }[];
+}
+
 interface CostHistoryResponse {
   daily: CostHistoryEntry[];
+  dailyDetails: DailyDetail[];
   weekly: CostHistoryEntry[];
   monthly: CostHistoryEntry[];
   byAgent: Record<string, number>;
@@ -53,6 +60,7 @@ export async function GET() {
 
     // Aggregate by day from codexbar data
     const dailyMap: Record<string, number> = {};
+    const dailyDetailsMap: Record<string, DailyDetail> = {};
     const modelMap: Record<string, number> = {};
     const providerMap: Record<string, number> = {};
 
@@ -72,6 +80,20 @@ export async function GET() {
 
         if (dayCost > 0) {
           dailyMap[date] = (dailyMap[date] || 0) + dayCost;
+        }
+
+        // Collect daily details with model breakdowns
+        if (!dailyDetailsMap[date]) {
+          dailyDetailsMap[date] = { date, totalCost: 0, modelBreakdowns: [] };
+        }
+        dailyDetailsMap[date].totalCost += dayCost;
+        for (const m of day.modelBreakdowns || []) {
+          dailyDetailsMap[date].modelBreakdowns.push({
+            modelName: m.modelName || "unknown",
+            cost: m.cost || 0,
+            inputTokens: m.inputTokens,
+            outputTokens: m.outputTokens,
+          });
         }
 
         // Model breakdown
@@ -174,8 +196,13 @@ export async function GET() {
       console.error('Failed to estimate agent costs:', err);
     }
 
+    // Build dailyDetails sorted array
+    const dailyDetails = Object.values(dailyDetailsMap)
+      .sort((a, b) => b.date.localeCompare(a.date));
+
     const response: CostHistoryResponse = {
       daily,
+      dailyDetails,
       weekly,
       monthly,
       byAgent: agentMap,
@@ -193,6 +220,7 @@ export async function GET() {
     return NextResponse.json(
       {
         daily: [],
+        dailyDetails: [],
         weekly: [],
         monthly: [],
         byAgent: {},

@@ -232,7 +232,7 @@ export default function CostsPage() {
       </div>
 
       {/* Billing Account Info */}
-      {(data?.billingAccount || data?.providers?.length) && (
+      {(data?.billingAccount || (data?.providers?.length ?? 0) > 0) && (
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-zinc-300 flex items-center gap-2">
@@ -330,7 +330,7 @@ export default function CostsPage() {
       </div>
 
       {/* Detailed Table */}
-      <CostTable data={data?.raw || []} />
+      <CostTable data={(historyData as any)?.dailyDetails || data?.raw || []} />
     </div>
   );
 }
