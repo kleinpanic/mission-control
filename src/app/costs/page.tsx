@@ -324,8 +324,8 @@ export default function CostsPage() {
 
       {/* Provider/Model Breakdown (Existing) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ProviderBreakdown data={summary.byProvider} />
-        <ProviderBreakdown data={summary.byModel} title="By Model" />
+        <ProviderBreakdown data={historyData?.byProvider || summary.byProvider} />
+        <ProviderBreakdown data={historyData?.byModel || summary.byModel} title="By Model" />
       </div>
 
       {/* Detailed Table */}
