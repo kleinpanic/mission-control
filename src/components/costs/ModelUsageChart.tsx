@@ -104,7 +104,7 @@ export function ModelUsageChart({ byModel, byAgent }: ModelUsageChartProps) {
                   tickFormatter={formatCost}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="cost" fill="#10b981" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="cost" isAnimationActive={false} fill="#10b981" radius={[4, 4, 0, 0]}>
                   {modelData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
@@ -146,7 +146,7 @@ export function ModelUsageChart({ byModel, byAgent }: ModelUsageChartProps) {
                   tickFormatter={formatCost}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="cost" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="cost" isAnimationActive={false} fill="#3b82f6" radius={[4, 4, 0, 0]}>
                   {agentData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
