@@ -100,6 +100,7 @@ export function CostTrendChart({ daily, weekly, monthly }: CostTrendChartProps) 
             dot={{ fill: "#10b981", r: 4 }}
             activeDot={{ r: 6 }}
             name="Cost ($)"
+            isAnimationActive={false}
           />
         </LineChart>
       </ResponsiveContainer>
