@@ -174,10 +174,11 @@ export function GatewayProvider({ children }: Props) {
           return "ws://127.0.0.1:18789";
         }
         
-        // Direct connection to gateway WebSocket on port 18789
-        // (no proxy needed - gateway listens on all interfaces)
+        // Remote access: use the WebSocket proxy on the same origin
+        // The custom server.ts proxies /api/gateway/ws -> ws://127.0.0.1:18789
+        // This avoids needing the gateway to bind on all interfaces
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        return `${protocol}//${hostname}:18789`;
+        return `${protocol}//${window.location.host}/api/gateway/ws`;
       }
       
       return "ws://127.0.0.1:18789";
