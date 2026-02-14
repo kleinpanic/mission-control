@@ -15,6 +15,7 @@ interface KanbanColumnProps {
   onDragOver: (e: React.DragEvent) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
+  onMoveTask?: (id: string, status: TaskStatus) => void;
   onApproveTask?: (taskId: string) => void;
   onRejectTask?: (taskId: string) => void;
 }
@@ -29,6 +30,7 @@ export function KanbanColumn({
   onDragOver,
   onEditTask,
   onDeleteTask,
+  onMoveTask,
   onApproveTask,
   onRejectTask,
 }: KanbanColumnProps) {
@@ -42,19 +44,19 @@ export function KanbanColumn({
       onDrop={onDrop}
       onDragOver={onDragOver}
     >
-      <div className="p-4 border-b border-zinc-800">
+      <div className="p-3 border-b border-zinc-800">
         <div className="flex items-center justify-between">
-          <h3 className="font-medium text-zinc-100">{title}</h3>
-          <span className="text-sm text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">
+          <h3 className="font-medium text-sm text-zinc-100">{title}</h3>
+          <span className="text-xs text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
             {tasks.length}
           </span>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-[200px]">
+      <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[200px] max-h-[600px]">
         {tasks.length === 0 ? (
           <div className="h-full flex items-center justify-center">
-            <p className="text-sm text-zinc-600">Drop tasks here</p>
+            <p className="text-xs text-zinc-600">Drop tasks here</p>
           </div>
         ) : (
           tasks.map((task) =>
@@ -70,9 +72,11 @@ export function KanbanColumn({
               <TaskCard
                 key={task.id}
                 task={task}
+                columnStatus={status}
                 onDragStart={(e) => onDragStart(e, task.id)}
                 onEdit={() => onEditTask(task)}
                 onDelete={() => onDeleteTask(task.id)}
+                onMoveTask={onMoveTask}
               />
             )
           )
