@@ -60,10 +60,11 @@ export default function SettingsPage() {
       
       setLoading(true);
       try {
-        const [agentsResult, statusResult, configResult] = await Promise.all([
+        const [agentsResult, statusResult, configResult, channelsResult] = await Promise.all([
           request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
           request<any>("status").catch(e => { console.error("status error:", e); return null; }),
-          request<any>("gateway.config.get").catch(e => { console.error("gateway.config.get error:", e); return null; }),
+          request<any>("config.get").catch(e => { console.error("config.get error:", e); return null; }),
+          request<any>("channels.status").catch(e => { console.error("channels.status error:", e); return null; }),
         ]);
         
         if (agentsResult && statusResult) {
@@ -87,11 +88,17 @@ export default function SettingsPage() {
             });
           }
           
-          // Extract channels from config
-          const channels = configResult?.config?.channels ? Object.keys(configResult.config.channels) : [];
-          
-          // Debug logging
-          console.log('[Settings] Config result:', configResult);
+          // Extract channels from channels.status or config
+          let channels: string[] = [];
+          if (channelsResult?.channels) {
+            // channels.status returns array of channel objects
+            channels = channelsResult.channels.map((ch: any) => 
+              ch.name || ch.type || ch.id || 'unknown'
+            );
+          } else if (configResult?.config?.channels) {
+            channels = Object.keys(configResult.config.channels);
+          }
+          console.log('[Settings] Channels result:', channelsResult);
           console.log('[Settings] Extracted channels:', channels);
           
           setConfig({

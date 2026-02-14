@@ -66,7 +66,7 @@ export function GatewayProvider({ children }: Props) {
               mode: "webchat"
             },
             role: "operator",
-            scopes: ["operator.read", "operator.write"],
+            scopes: ["operator.admin"],
             auth: { token: process.env.NEXT_PUBLIC_OPENCLAW_GATEWAY_TOKEN || "" }
           }
         }));
