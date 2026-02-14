@@ -41,17 +41,17 @@ app.prepare().then(() => {
           console.log("[WS Proxy] Connected to gateway");
         });
 
-        // Proxy: client -> gateway
-        clientWs.on("message", (data) => {
+        // Proxy: client -> gateway (forward as text string)
+        clientWs.on("message", (data, isBinary) => {
           if (gatewayWs.readyState === WebSocket.OPEN) {
-            gatewayWs.send(data);
+            gatewayWs.send(isBinary ? data : data.toString());
           }
         });
 
-        // Proxy: gateway -> client
-        gatewayWs.on("message", (data) => {
+        // Proxy: gateway -> client (forward as text to avoid Blob in browser)
+        gatewayWs.on("message", (data, isBinary) => {
           if (clientWs.readyState === WebSocket.OPEN) {
-            clientWs.send(data);
+            clientWs.send(data.toString(), { binary: false });
           }
         });
 
