@@ -30,7 +30,24 @@ export default function SessionsPage() {
       });
       
       if (result?.sessions) {
-        setSessions(result.sessions);
+        // Normalize sessions data from raw gateway format if needed
+        const normalized = result.sessions.map(s => {
+          if (!s.tokens && ((s as any).totalTokens !== undefined || (s as any).inputTokens !== undefined)) {
+            const used = (s as any).totalTokens ?? (((s as any).inputTokens || 0) + ((s as any).outputTokens || 0));
+            const limit = (s as any).contextTokens ?? 200000;
+            return {
+              ...s,
+              tokens: {
+                used,
+                limit,
+                input: (s as any).inputTokens || 0,
+                output: (s as any).outputTokens || 0
+              }
+            };
+          }
+          return s;
+        });
+        setSessions(normalized);
       }
     } catch (err) {
       console.error("Failed to fetch sessions:", err);

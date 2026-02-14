@@ -107,7 +107,9 @@ export function SessionDetail({ session, onClose }: SessionDetailProps) {
           <div className="flex justify-between text-sm">
             <span className="text-zinc-400">Context</span>
             <span className="text-zinc-100">
-              {session.tokens ? `${session.tokens.used.toLocaleString()} / ${session.tokens.limit.toLocaleString()}` : 'N/A'}
+              {session.tokens?.limit != null && session.tokens?.used != null 
+                ? `${session.tokens.used.toLocaleString()} / ${session.tokens.limit.toLocaleString()}` 
+                : 'N/A'}
             </span>
           </div>
           <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">

@@ -301,8 +301,8 @@ export function SessionTable({
                     </div>
                     <span className="text-zinc-600">•</span>
                     <span className="text-zinc-500 text-xs">
-                      {session.tokens?.limit.toLocaleString() || 'N/A'} tokens
-                      {modelLimit && session.tokens && modelLimit !== session.tokens.limit && (
+                      {session.tokens?.limit != null ? session.tokens.limit.toLocaleString() : 'N/A'} tokens
+                      {modelLimit && session.tokens?.limit != null && modelLimit !== session.tokens.limit && (
                         <span className="text-zinc-600"> (model: {formatTokenLimit(modelLimit)})</span>
                       )}
                     </span>
@@ -317,7 +317,8 @@ export function SessionTable({
                     </div>
                     <div className="flex items-center gap-1 text-zinc-500 text-xs">
                       <Clock className="w-3 h-3" />
-                      {session.lastActivity ? formatRelativeTime(session.lastActivity) : 'Never'}
+                      {session.lastActivity ? formatRelativeTime(session.lastActivity) : 
+                       (session as any).updatedAt ? formatRelativeTime(new Date((session as any).updatedAt).toISOString()) : 'Never'}
                     </div>
                   </div>
 

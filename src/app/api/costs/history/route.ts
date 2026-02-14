@@ -76,8 +76,8 @@ export async function GET() {
 
         // Model breakdown
         for (const model of day.modelBreakdowns || []) {
-          const modelCost = model.cost || 0;
-          if (modelCost > 0) {
+          const modelCost = typeof model.cost === 'number' ? model.cost : 0;
+          if (modelCost >= 0) {
             const modelName = model.modelName || "unknown";
             modelMap[modelName] = (modelMap[modelName] || 0) + modelCost;
           }
