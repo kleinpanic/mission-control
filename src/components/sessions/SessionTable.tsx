@@ -194,7 +194,7 @@ export function SessionTable({
   };
 
   const atCapacitySessions = sessions.filter(s => 
-    Math.round((s.tokens.used / s.tokens.limit) * 100) >= 95
+    s.tokens && Math.round((s.tokens.used / s.tokens.limit) * 100) >= 95
   ).length;
 
   if (loading) {
@@ -254,11 +254,11 @@ export function SessionTable({
         {sessions.map((session) => {
           const agent = getAgentFromKey(session.key);
           const channel = getChannelFromKey(session.key);
-          const contextPercent = Math.round(
-            (session.tokens.used / session.tokens.limit) * 100
-          );
+          const contextPercent = session.tokens 
+            ? Math.round((session.tokens.used / session.tokens.limit) * 100)
+            : 0;
           const isSelected = session.key === selectedSessionKey;
-          const modelLimit = getModelLimit(session.model);
+          const modelLimit = getModelLimit(session.model || '');
           const isCompacting = actionInProgress === `compact-${session.key}`;
           const isResetting = actionInProgress === `reset-${session.key}`;
           const isDeleting = actionInProgress === `delete-${session.key}`;
@@ -301,8 +301,8 @@ export function SessionTable({
                     </div>
                     <span className="text-zinc-600">•</span>
                     <span className="text-zinc-500 text-xs">
-                      {session.tokens.limit.toLocaleString()} tokens
-                      {modelLimit && modelLimit !== session.tokens.limit && (
+                      {session.tokens?.limit.toLocaleString() || 'N/A'} tokens
+                      {modelLimit && session.tokens && modelLimit !== session.tokens.limit && (
                         <span className="text-zinc-600"> (model: {formatTokenLimit(modelLimit)})</span>
                       )}
                     </span>
@@ -317,7 +317,7 @@ export function SessionTable({
                     </div>
                     <div className="flex items-center gap-1 text-zinc-500 text-xs">
                       <Clock className="w-3 h-3" />
-                      {formatRelativeTime(session.lastActivity)}
+                      {session.lastActivity ? formatRelativeTime(session.lastActivity) : 'Never'}
                     </div>
                   </div>
 
@@ -407,10 +407,10 @@ export function SessionTable({
               </div>
 
               {/* Compactions indicator */}
-              {session.compactions > 0 && (
+              {(session.compactions || 0) > 0 && (
                 <div className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
                   <Minimize2 className="w-3 h-3" />
-                  {session.compactions} previous compaction{session.compactions > 1 ? 's' : ''}
+                  {session.compactions || 0} previous compaction{(session.compactions || 0) > 1 ? 's' : ''}
                 </div>
               )}
             </div>

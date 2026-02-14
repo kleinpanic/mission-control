@@ -23,10 +23,10 @@ export interface Agent {
 
 export interface Session {
   key: string;
-  kind: 'direct' | 'group' | 'isolated';
-  agentId: string;
-  model: string;
-  tokens: {
+  kind?: 'direct' | 'group' | 'isolated';
+  agentId?: string;
+  model?: string;
+  tokens?: {
     used: number;
     limit: number;
     input?: number;
@@ -38,8 +38,8 @@ export interface Session {
     output: number;
     total: number;
   };
-  lastActivity: string;
-  compactions: number;
+  lastActivity?: string;
+  compactions?: number;
   thinking?: string;
   startedAt?: string;
   messages?: Message[];
