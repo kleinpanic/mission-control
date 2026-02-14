@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(cachedData);
     }
 
-    // Fetch cron jobs from openclaw CLI
+    // Fetch cron jobs from openclaw CLI (include disabled jobs)
     const { stdout, stderr } = await execAsync(
-      'openclaw cron list --json',
+      'openclaw cron list --all --json',
       { timeout: 15000 }
     );
 
