@@ -123,11 +123,62 @@ export async function GET() {
       providerMap[key] = Math.round(providerMap[key] * 100) / 100;
     });
 
+    // Estimate per-agent costs from session data
+    const agentMap: Record<string, number> = {};
+    try {
+      const { stdout: sessionData } = await execAsync(
+        'openclaw sessions --json 2>/dev/null || echo "{}"',
+        { timeout: 10000 }
+      );
+      // Skip plugin log lines, find JSON
+      const sessionLines = sessionData.split('\n');
+      let sessionJsonStart = -1;
+      for (let i = 0; i < sessionLines.length; i++) {
+        if (sessionLines[i].trim().startsWith('{')) {
+          sessionJsonStart = i;
+          break;
+        }
+      }
+      if (sessionJsonStart >= 0) {
+        const sessionJson = JSON.parse(sessionLines.slice(sessionJsonStart).join('\n'));
+        const sessions = sessionJson.sessions || [];
+        
+        // Rough cost estimation per model ($/1M tokens, blended input/output)
+        const modelCostPer1M: Record<string, number> = {
+          'claude-sonnet-4-5': 9.0,
+          'claude-opus-4-5': 45.0,
+          'claude-opus-4-6': 45.0,
+          'gpt-5.2': 15.0,
+          'gemini-3-flash-preview': 0.5,
+          'gemini-3-pro-preview': 5.0,
+        };
+        
+        for (const session of sessions) {
+          const agentId = session.key?.split(':')[1] || 'unknown';
+          const totalTokens = (session.inputTokens || 0) + (session.outputTokens || 0);
+          const model = session.model || 'claude-sonnet-4-5';
+          
+          // Find matching cost rate
+          const costRate = Object.entries(modelCostPer1M).find(([k]) => model.includes(k))?.[1] || 5.0;
+          const cost = (totalTokens / 1_000_000) * costRate;
+          
+          agentMap[agentId] = (agentMap[agentId] || 0) + cost;
+        }
+        
+        // Round values
+        Object.keys(agentMap).forEach((key) => {
+          agentMap[key] = Math.round(agentMap[key] * 100) / 100;
+        });
+      }
+    } catch (err) {
+      console.error('Failed to estimate agent costs:', err);
+    }
+
     const response: CostHistoryResponse = {
       daily,
       weekly,
       monthly,
-      byAgent: {}, // Agent data would need session logs - keeping empty for now
+      byAgent: agentMap,
       byModel: modelMap,
       byProvider: providerMap,
     };
