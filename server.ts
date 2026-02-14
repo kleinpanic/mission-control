@@ -32,8 +32,12 @@ app.prepare().then(() => {
 
     if (pathname === "/api/gateway/ws") {
       wss.handleUpgrade(req, socket, head, (clientWs) => {
-        // Connect to the real gateway
-        const gatewayWs = new WebSocket(GATEWAY_URL);
+        // Connect to the real gateway, forwarding the original Origin header
+        const gatewayWs = new WebSocket(GATEWAY_URL, {
+          headers: {
+            Origin: req.headers.origin || req.headers.host || "http://localhost:3333"
+          }
+        });
         let clientClosed = false;
         let gatewayClosed = false;
 
