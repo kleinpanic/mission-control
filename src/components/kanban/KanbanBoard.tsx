@@ -89,8 +89,7 @@ export function KanbanBoard({
       <div
         className="grid gap-3 pb-4"
         style={{
-          gridTemplateColumns: `repeat(${visibleColumns.length}, minmax(220px, 1fr))`,
-          minWidth: visibleColumns.length > 4 ? `${visibleColumns.length * 230}px` : undefined,
+          gridTemplateColumns: `repeat(${visibleColumns.length}, minmax(180px, 1fr))`,
         }}
       >
         {visibleColumns.map((column) => (
