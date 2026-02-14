@@ -97,6 +97,7 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
 
   // Identify sessions that match policies
   const compactCandidates = sessions.filter((s) => {
+    if (!s.tokens) return false;
     const pct = Math.round((s.tokens.used / s.tokens.limit) * 100);
     return pct >= policy.autoCompactThreshold;
   });
@@ -104,6 +105,7 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
   const staleCandidates = sessions.filter((s) => {
     const agent = getAgentFromKey(s.key);
     if (policy.protectedAgents.includes(agent)) return false;
+    if (!s.lastActivity) return false;
     const hoursSinceActivity =
       (Date.now() - new Date(s.lastActivity).getTime()) / (1000 * 60 * 60);
     return hoursSinceActivity >= policy.staleSessionHours;

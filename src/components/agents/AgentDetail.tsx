@@ -57,7 +57,7 @@ export function AgentDetail({ agent }: AgentDetailProps) {
                 <div className="flex-1 min-w-0">
                   <p className="text-zinc-300 truncate">{session.key}</p>
                   <p className="text-xs text-zinc-500">
-                    {session.tokens.used.toLocaleString()} / {session.tokens.limit.toLocaleString()} tokens
+                    {session.tokens ? `${session.tokens.used.toLocaleString()} / ${session.tokens.limit.toLocaleString()} tokens` : 'No token data'}
                   </p>
                 </div>
                 <Button variant="ghost" size="sm" className="text-zinc-400">

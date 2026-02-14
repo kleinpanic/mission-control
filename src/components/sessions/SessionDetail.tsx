@@ -66,9 +66,9 @@ export function SessionDetail({ session, onClose }: SessionDetailProps) {
     }
   };
 
-  const contextPercent = Math.round(
-    (session.tokens.used / session.tokens.limit) * 100
-  );
+  const contextPercent = session.tokens 
+    ? Math.round((session.tokens.used / session.tokens.limit) * 100)
+    : 0;
 
   return (
     <Card className="bg-zinc-900 border-zinc-800 sticky top-6">
@@ -94,9 +94,9 @@ export function SessionDetail({ session, onClose }: SessionDetailProps) {
             <Badge variant="secondary" className="text-xs bg-zinc-700">
               {session.model}
             </Badge>
-            {session.compactions > 0 && (
+            {(session.compactions || 0) > 0 && (
               <Badge variant="secondary" className="text-xs bg-yellow-900/50 text-yellow-400">
-                {session.compactions} compactions
+                {session.compactions || 0} compactions
               </Badge>
             )}
           </div>
@@ -107,7 +107,7 @@ export function SessionDetail({ session, onClose }: SessionDetailProps) {
           <div className="flex justify-between text-sm">
             <span className="text-zinc-400">Context</span>
             <span className="text-zinc-100">
-              {session.tokens.used.toLocaleString()} / {session.tokens.limit.toLocaleString()}
+              {session.tokens ? `${session.tokens.used.toLocaleString()} / ${session.tokens.limit.toLocaleString()}` : 'N/A'}
             </span>
           </div>
           <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
