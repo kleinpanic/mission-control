@@ -15,9 +15,22 @@ import {
   ChevronUp,
   Send,
   History,
+  MoreVertical,
+  RefreshCw,
+  Settings,
+  Minimize2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { AgentDetail } from "./AgentDetail";
+import { toast } from "sonner";
+import { useGateway } from "@/providers/GatewayProvider";
 
 interface AgentCardProps {
   agent: Agent;
@@ -82,9 +95,52 @@ function formatHeartbeat(value: string | null, overdue: boolean): string {
 
 export function AgentCard({ agent }: AgentCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const { connected, request } = useGateway();
   const status = statusConfig[agent.status];
 
   const contextPercentage = Math.round(agent.contextUsagePercent || 0);
+
+  const handleTriggerHeartbeat = async () => {
+    if (!connected) {
+      toast.error("Not connected to gateway");
+      return;
+    }
+    
+    setActionInProgress("heartbeat");
+    try {
+      await request("heartbeat.trigger", { agentId: agent.id });
+      toast.success(`Heartbeat triggered for ${agent.name}`);
+    } catch (error) {
+      console.error("Failed to trigger heartbeat:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to trigger heartbeat");
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleCompactSessions = async () => {
+    if (!connected) {
+      toast.error("Not connected to gateway");
+      return;
+    }
+    
+    setActionInProgress("compact");
+    try {
+      // Compact all sessions for this agent
+      await request("agent.compactSessions", { agentId: agent.id });
+      toast.success(`Compacted sessions for ${agent.name}`);
+    } catch (error) {
+      console.error("Failed to compact sessions:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to compact sessions");
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleConfigPatch = async () => {
+    toast.info("Config patch UI coming soon");
+  };
 
   return (
     <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
@@ -119,6 +175,50 @@ export function AgentCard({ agent }: AgentCardProps) {
               </div>
             </div>
           </div>
+          
+          {/* Agent Actions Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0 text-zinc-400 hover:text-zinc-100"
+                disabled={!!actionInProgress || !connected}
+              >
+                {actionInProgress ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <MoreVertical className="w-4 h-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-700">
+              <DropdownMenuItem 
+                onClick={handleTriggerHeartbeat}
+                className="text-zinc-200 focus:bg-zinc-800 focus:text-zinc-100"
+                disabled={actionInProgress === "heartbeat"}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Trigger Heartbeat
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={handleCompactSessions}
+                className="text-zinc-200 focus:bg-zinc-800 focus:text-zinc-100"
+                disabled={actionInProgress === "compact"}
+              >
+                <Minimize2 className="w-4 h-4 mr-2" />
+                Compact All Sessions
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-zinc-700" />
+              <DropdownMenuItem 
+                onClick={handleConfigPatch}
+                className="text-zinc-200 focus:bg-zinc-800 focus:text-zinc-100"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Config Patch
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardHeader>
 

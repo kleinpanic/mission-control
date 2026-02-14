@@ -1,30 +1,38 @@
 "use client";
 
-import { Task } from "@/types";
+import { Task, TaskStatus } from "@/types";
 import { TaskCard } from "./TaskCard";
+import { IntakeApprovalCard } from "./IntakeApprovalCard";
 import { cn } from "@/lib/utils";
 
 interface KanbanColumnProps {
   title: string;
   color: string;
+  status: TaskStatus;
   tasks: Task[];
   onDragStart: (e: React.DragEvent, taskId: string) => void;
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
+  onApproveTask?: (taskId: string) => void;
+  onRejectTask?: (taskId: string) => void;
 }
 
 export function KanbanColumn({
   title,
   color,
+  status,
   tasks,
   onDragStart,
   onDrop,
   onDragOver,
   onEditTask,
   onDeleteTask,
+  onApproveTask,
+  onRejectTask,
 }: KanbanColumnProps) {
+  const isIntakeColumn = status === "intake";
   return (
     <div
       className={cn(
@@ -49,15 +57,25 @@ export function KanbanColumn({
             <p className="text-sm text-zinc-600">Drop tasks here</p>
           </div>
         ) : (
-          tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onDragStart={(e) => onDragStart(e, task.id)}
-              onEdit={() => onEditTask(task)}
-              onDelete={() => onDeleteTask(task.id)}
-            />
-          ))
+          tasks.map((task) =>
+            isIntakeColumn && onApproveTask && onRejectTask ? (
+              <IntakeApprovalCard
+                key={task.id}
+                task={task}
+                onAccept={() => onApproveTask(task.id)}
+                onReject={() => onRejectTask(task.id)}
+                onEdit={() => onEditTask(task)}
+              />
+            ) : (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onDragStart={(e) => onDragStart(e, task.id)}
+                onEdit={() => onEditTask(task)}
+                onDelete={() => onDeleteTask(task.id)}
+              />
+            )
+          )
         )}
       </div>
     </div>
