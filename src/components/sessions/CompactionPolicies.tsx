@@ -114,16 +114,30 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
   const runCompaction = async () => {
     if (!connected || compactCandidates.length === 0) return;
     setRunning(true);
-    let compacted = 0;
+    let reset = 0;
+    let failed = 0;
     for (const session of compactCandidates) {
       try {
-        await request("sessions.compact", { sessionKey: session.key });
-        compacted++;
-      } catch {
-        // continue with others
+        // Note: sessions.compact does not exist in the gateway API.
+        // We use sessions.reset to clear high-usage sessions instead.
+        // Compaction happens automatically during agent runs when context is near limit.
+        await request("sessions.reset", { sessionKey: session.key });
+        reset++;
+      } catch (err) {
+        console.error(`[Compaction] Failed to reset session ${session.key}:`, err);
+        failed++;
       }
     }
-    toast.success(`Compacted ${compacted} session${compacted !== 1 ? "s" : ""}`);
+    if (reset > 0) {
+      toast.success(`Reset ${reset} session${reset !== 1 ? "s" : ""}`, {
+        description: "High-usage sessions cleared. Compaction happens automatically during agent runs.",
+      });
+    }
+    if (failed > 0) {
+      toast.error(`Failed to reset ${failed} session${failed !== 1 ? "s" : ""}`, {
+        description: "Check console for details.",
+      });
+    }
     setRunning(false);
     onRefresh?.();
   };
@@ -132,15 +146,24 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
     if (!connected || staleCandidates.length === 0) return;
     setRunning(true);
     let pruned = 0;
+    let failed = 0;
     for (const session of staleCandidates) {
       try {
-        await request("sessions.reset", { sessionKey: session.key });
+        await request("sessions.delete", { sessionKey: session.key });
         pruned++;
-      } catch {
-        // continue with others
+      } catch (err) {
+        console.error(`[Prune] Failed to delete session ${session.key}:`, err);
+        failed++;
       }
     }
-    toast.success(`Pruned ${pruned} stale session${pruned !== 1 ? "s" : ""}`);
+    if (pruned > 0) {
+      toast.success(`Deleted ${pruned} stale session${pruned !== 1 ? "s" : ""}`);
+    }
+    if (failed > 0) {
+      toast.error(`Failed to delete ${failed} session${failed !== 1 ? "s" : ""}`, {
+        description: "Check console for details.",
+      });
+    }
     setRunning(false);
     onRefresh?.();
   };
@@ -306,11 +329,11 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
               <div className="flex items-center gap-2">
                 <Minimize2 className="w-4 h-4 text-zinc-400" />
                 <div>
-                  <p className="text-sm text-zinc-200">Auto-Compact</p>
+                  <p className="text-sm text-zinc-200">High Usage Reset</p>
                   <p className="text-xs text-zinc-500">
                     {policy.autoCompactEnabled
-                      ? `Compact at ${policy.autoCompactThreshold}% capacity`
-                      : "Manual only"}
+                      ? `Reset sessions at ${policy.autoCompactThreshold}% capacity`
+                      : "Manual only — compaction is automatic during agent runs"}
                   </p>
                 </div>
               </div>
@@ -338,10 +361,10 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
               <div className="flex items-center gap-2">
                 <Trash2 className="w-4 h-4 text-zinc-400" />
                 <div>
-                  <p className="text-sm text-zinc-200">Stale Pruning</p>
+                  <p className="text-sm text-zinc-200">Stale Cleanup</p>
                   <p className="text-xs text-zinc-500">
                     {policy.stalePruneEnabled
-                      ? `Reset after ${policy.staleSessionHours}h inactive`
+                      ? `Delete after ${policy.staleSessionHours}h inactive`
                       : "Manual only"}
                   </p>
                 </div>

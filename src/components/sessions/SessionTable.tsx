@@ -131,19 +131,16 @@ export function SessionTable({
     setActionInProgress(`compact-${session.key}`);
     
     try {
-      const result = await request("sessions.compact", { sessionKey: session.key });
-      
-      if (result) {
-        const saved = result.tokensSaved || result.saved || 0;
-        toast.success(`Session compacted! Saved ${saved.toLocaleString()} tokens`);
-        onRefresh?.();
-      } else {
-        toast.success("Session compacted successfully");
-        onRefresh?.();
-      }
+      // Note: sessions.compact does not exist in the gateway API.
+      // Use sessions.reset to clear the session instead.
+      await request("sessions.reset", { sessionKey: session.key });
+      toast.success("Session reset successfully", {
+        description: "Compaction happens automatically during agent runs.",
+      });
+      onRefresh?.();
     } catch (error) {
-      console.error("Failed to compact session:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to compact session");
+      console.error("Failed to reset session:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to reset session");
     } finally {
       setActionInProgress(null);
     }
