@@ -85,6 +85,9 @@ export default function SettingsPage() {
             });
           }
           
+          // Extract channels from config
+          const channels = configResult?.config?.channels ? Object.keys(configResult.config.channels) : [];
+          
           setConfig({
             defaultModel,
             contextTokens,
@@ -100,7 +103,7 @@ export default function SettingsPage() {
                 heartbeatInterval: heartbeat?.every || "—",
               };
             }),
-            channels: statusResult.channelSummary?.channels?.map((c: any) => c.id) || [],
+            channels,
           });
           
           // Initialize model overrides from current agent models
