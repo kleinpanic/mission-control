@@ -88,18 +88,19 @@ export default function SettingsPage() {
             });
           }
           
-          // Extract channels from channels.status or config
+          // Extract channels from channels.status
           let channels: string[] = [];
-          if (channelsResult?.channels) {
-            // channels.status returns array of channel objects
-            channels = channelsResult.channels.map((ch: any) => 
-              ch.name || ch.type || ch.id || 'unknown'
+          if (channelsResult?.channelMeta) {
+            // channels.status returns channelMeta array with {id, label, detailLabel}
+            channels = channelsResult.channelMeta.map((ch: any) => 
+              ch.label || ch.detailLabel || ch.id || 'unknown'
             );
+          } else if (channelsResult?.channelOrder) {
+            // Fallback to channelOrder array
+            channels = channelsResult.channelOrder;
           } else if (configResult?.config?.channels) {
             channels = Object.keys(configResult.config.channels);
           }
-          console.log('[Settings] Channels result:', channelsResult);
-          console.log('[Settings] Extracted channels:', channels);
           
           setConfig({
             defaultModel,
@@ -436,11 +437,16 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {config?.channels.map((channel, idx) => (
-                <div key={idx} className="p-2 bg-zinc-800/50 rounded text-sm text-zinc-300">
-                  {channel}
-                </div>
-              )) || <p className="text-zinc-500">No channels configured</p>}
+              {config?.channels && config.channels.length > 0 ? (
+                config.channels.map((channel, idx) => (
+                  <div key={idx} className="flex items-center gap-2 p-2.5 bg-zinc-800/50 rounded-lg border border-zinc-700">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-sm font-medium text-zinc-200">{channel}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-zinc-500 text-center py-4">No channels configured</p>
+              )}
             </div>
           </CardContent>
         </Card>
