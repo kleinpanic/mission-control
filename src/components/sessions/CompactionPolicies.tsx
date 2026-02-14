@@ -111,36 +111,9 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
     return hoursSinceActivity >= policy.staleSessionHours;
   });
 
-  const runCompaction = async () => {
-    if (!connected || compactCandidates.length === 0) return;
-    setRunning(true);
-    let reset = 0;
-    let failed = 0;
-    for (const session of compactCandidates) {
-      try {
-        // Note: sessions.compact does not exist in the gateway API.
-        // We use sessions.reset to clear high-usage sessions instead.
-        // Compaction happens automatically during agent runs when context is near limit.
-        await request("sessions.reset", { key: session.key });
-        reset++;
-      } catch (err) {
-        console.error(`[Compaction] Failed to reset session ${session.key}:`, err);
-        failed++;
-      }
-    }
-    if (reset > 0) {
-      toast.success(`Reset ${reset} session${reset !== 1 ? "s" : ""}`, {
-        description: "High-usage sessions cleared. Compaction happens automatically during agent runs.",
-      });
-    }
-    if (failed > 0) {
-      toast.error(`Failed to reset ${failed} session${failed !== 1 ? "s" : ""}`, {
-        description: "Check console for details.",
-      });
-    }
-    setRunning(false);
-    onRefresh?.();
-  };
+  // Removed: Manual compaction via sessions.reset
+  // Compaction happens automatically during agent runs when context approaches limit.
+  // Manual intervention not needed - OpenClaw handles this internally.
 
   const runPrune = async () => {
     if (!connected || staleCandidates.length === 0) return;
@@ -194,46 +167,15 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
       <CardContent className="space-y-4">
         {editing ? (
           <div className="space-y-3">
-            {/* Auto-compact settings */}
+            {/* Note: Auto-compact is always enabled by OpenClaw - no manual configuration needed */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Minimize2 className="w-3.5 h-3.5 text-zinc-400" />
-                <Label className="text-xs text-zinc-300 font-medium">Auto-Compact</Label>
+                <Minimize2 className="w-3.5 h-3.5 text-emerald-400" />
+                <Label className="text-xs text-zinc-300 font-medium">Automatic Compaction</Label>
               </div>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min="50"
-                  max="100"
-                  value={draft.autoCompactThreshold}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      autoCompactThreshold: Math.min(
-                        100,
-                        Math.max(50, parseInt(e.target.value) || 90)
-                      ),
-                    })
-                  }
-                  className="h-8 w-20 bg-zinc-800 border-zinc-700 text-sm"
-                />
-                <span className="text-xs text-zinc-500">% capacity threshold</span>
-                <Button
-                  variant={draft.autoCompactEnabled ? "default" : "secondary"}
-                  size="sm"
-                  className={cn(
-                    "h-7 text-xs ml-auto",
-                    draft.autoCompactEnabled
-                      ? "bg-emerald-600 hover:bg-emerald-500"
-                      : "bg-zinc-800"
-                  )}
-                  onClick={() =>
-                    setDraft({ ...draft, autoCompactEnabled: !draft.autoCompactEnabled })
-                  }
-                >
-                  {draft.autoCompactEnabled ? "Enabled" : "Disabled"}
-                </Button>
-              </div>
+              <p className="text-xs text-zinc-500 pl-5">
+                OpenClaw handles session compaction automatically. Sessions are compacted when context approaches limit during agent runs. No manual configuration needed.
+              </p>
             </div>
 
             {/* Stale session pruning */}
@@ -329,30 +271,23 @@ export function CompactionPolicies({ sessions, onRefresh }: CompactionPoliciesPr
               <div className="flex items-center gap-2">
                 <Minimize2 className="w-4 h-4 text-zinc-400" />
                 <div>
-                  <p className="text-sm text-zinc-200">High Usage Reset</p>
+                  <p className="text-sm text-zinc-200">Automatic Compaction</p>
                   <p className="text-xs text-zinc-500">
-                    {policy.autoCompactEnabled
-                      ? `Reset sessions at ${policy.autoCompactThreshold}% capacity`
-                      : "Manual only — compaction is automatic during agent runs"}
+                    OpenClaw automatically compacts sessions when context approaches limit during agent runs
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {compactCandidates.length > 0 && (
                   <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50 text-xs">
-                    {compactCandidates.length} eligible
+                    {compactCandidates.length} at {policy.autoCompactThreshold}%+
                   </Badge>
                 )}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="h-7 text-xs bg-zinc-700 hover:bg-zinc-600"
-                  onClick={runCompaction}
-                  disabled={running || !connected || compactCandidates.length === 0}
-                >
-                  <Zap className="w-3 h-3 mr-1" />
-                  Run Now
-                </Button>
+                {compactCandidates.length === 0 && (
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/50 text-xs">
+                    All sessions healthy
+                  </Badge>
+                )}
               </div>
             </div>
 
