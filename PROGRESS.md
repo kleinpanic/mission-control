@@ -22,7 +22,7 @@ Current: Phase 2 - Data Display Fixes
 
 ### P0: Data Display Issues
 - [x] **Costs page:** "cost by agent", "by provider", "By Model" show no data (only "Cost By Model" works)
-- [ ] **Cron page:** Shows "10 total, 10 active, 0 disabled" - should show disabled crons
+- [x] **Cron page:** Shows "10 total, 10 active, 0 disabled" - should show disabled crons (FIXED: added --all flag)
 - [ ] **Settings:** All agents show "default: gpt-5.2" (wrong default model)
 - [ ] **Settings:** Connected channels shows nothing (should show Slack, WhatsApp, etc.)
 - [ ] **Analytics:** Shows "4 errors" - investigate
