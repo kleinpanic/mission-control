@@ -88,18 +88,27 @@ export default function SettingsPage() {
             });
           }
           
-          // Extract channels from channels.status
+          // Extract channels from channels.status or config
           let channels: string[] = [];
-          if (channelsResult?.channelMeta) {
+          
+          // Try channels.status response (channelMeta or channelOrder)
+          if (channelsResult?.channelMeta && Array.isArray(channelsResult.channelMeta) && channelsResult.channelMeta.length > 0) {
             // channels.status returns channelMeta array with {id, label, detailLabel}
             channels = channelsResult.channelMeta.map((ch: any) => 
               ch.label || ch.detailLabel || ch.id || 'unknown'
             );
-          } else if (channelsResult?.channelOrder) {
+          } else if (channelsResult?.channelOrder && Array.isArray(channelsResult.channelOrder) && channelsResult.channelOrder.length > 0) {
             // Fallback to channelOrder array
             channels = channelsResult.channelOrder;
-          } else if (configResult?.config?.channels) {
-            channels = Object.keys(configResult.config.channels);
+          }
+          
+          // Fallback to config.channels if channels.status didn't provide data
+          if (channels.length === 0 && configResult?.config?.channels) {
+            channels = Object.keys(configResult.config.channels).filter(key => {
+              // Only include enabled channels
+              const channelConfig = configResult.config.channels[key];
+              return channelConfig && (channelConfig.enabled !== false);
+            });
           }
           
           setConfig({
