@@ -6,12 +6,19 @@ import { CronTable } from "@/components/cron/CronTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Clock, CheckCircle, AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { RefreshCw, Clock, CheckCircle, AlertCircle, Filter } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+type StatusFilter = "all" | "active" | "disabled";
+type TargetFilter = "all" | "main" | "isolated";
 
 export default function CronPage() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [targetFilter, setTargetFilter] = useState<TargetFilter>("all");
 
   const fetchCronJobs = useCallback(async () => {
     setLoading(true);
@@ -52,6 +59,15 @@ export default function CronPage() {
 
   const activeJobs = jobs.filter((j) => j.enabled);
   const disabledJobs = jobs.filter((j) => !j.enabled);
+
+  // Apply filters
+  const filteredJobs = jobs.filter((j) => {
+    if (statusFilter === "active" && !j.enabled) return false;
+    if (statusFilter === "disabled" && j.enabled) return false;
+    if (targetFilter === "main" && j.sessionTarget !== "main") return false;
+    if (targetFilter === "isolated" && j.sessionTarget !== "isolated") return false;
+    return true;
+  });
 
   if (loading) {
     return (
@@ -129,6 +145,57 @@ export default function CronPage() {
         </Card>
       </div>
 
+      {/* Filters */}
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <Filter className="w-4 h-4 text-zinc-500" />
+          <span className="text-sm text-zinc-500">Status:</span>
+          {(["all", "active", "disabled"] as StatusFilter[]).map((f) => (
+            <Button
+              key={f}
+              variant={statusFilter === f ? "default" : "outline"}
+              size="sm"
+              className={cn(
+                "h-7 text-xs",
+                statusFilter === f
+                  ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                  : "border-zinc-700 text-zinc-400 hover:text-zinc-200"
+              )}
+              onClick={() => setStatusFilter(f)}
+            >
+              {f === "all" ? "All" : f === "active" ? "Active" : "Disabled"}
+              {f !== "all" && (
+                <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px] bg-zinc-700">
+                  {f === "active" ? activeJobs.length : disabledJobs.length}
+                </Badge>
+              )}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm text-zinc-500">Target:</span>
+          {(["all", "main", "isolated"] as TargetFilter[]).map((f) => (
+            <Button
+              key={f}
+              variant={targetFilter === f ? "default" : "outline"}
+              size="sm"
+              className={cn(
+                "h-7 text-xs",
+                targetFilter === f
+                  ? "bg-blue-600 hover:bg-blue-500 text-white"
+                  : "border-zinc-700 text-zinc-400 hover:text-zinc-200"
+              )}
+              onClick={() => setTargetFilter(f)}
+            >
+              {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+            </Button>
+          ))}
+        </div>
+        <span className="text-xs text-zinc-600 ml-auto">
+          Showing {filteredJobs.length} of {jobs.length} jobs
+        </span>
+      </div>
+
       {/* Jobs Table */}
       {error ? (
         <Card className="bg-zinc-900 border-zinc-800">
@@ -143,7 +210,7 @@ export default function CronPage() {
           </CardContent>
         </Card>
       ) : (
-        <CronTable jobs={jobs} onRunNow={handleRunNow} />
+        <CronTable jobs={filteredJobs} onRunNow={handleRunNow} />
       )}
     </div>
   );
