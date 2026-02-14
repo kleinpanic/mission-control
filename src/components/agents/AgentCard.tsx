@@ -109,8 +109,9 @@ export function AgentCard({ agent }: AgentCardProps) {
     
     setActionInProgress("heartbeat");
     try {
-      await request("heartbeat.trigger", { agentId: agent.id });
-      toast.success(`Heartbeat triggered for ${agent.name}`);
+      // Use the 'wake' method to trigger a heartbeat for the agent
+      await request("wake", { agentId: agent.id, mode: "now" });
+      toast.success(`Heartbeat triggered for ${agent.name || agent.id}`);
     } catch (error) {
       console.error("Failed to trigger heartbeat:", error);
       toast.error(error instanceof Error ? error.message : "Failed to trigger heartbeat");
@@ -127,9 +128,33 @@ export function AgentCard({ agent }: AgentCardProps) {
     
     setActionInProgress("compact");
     try {
-      // Compact all sessions for this agent
-      await request("agent.compactSessions", { agentId: agent.id });
-      toast.success(`Compacted sessions for ${agent.name}`);
+      // Get all sessions for this agent and compact each one
+      const result = await request<any>("sessions.list", { limit: 100 });
+      const agentSessions = (result?.sessions || []).filter((s: any) => {
+        const parts = (s.key || "").split(":");
+        return (s.agentId || parts[1]) === agent.id;
+      });
+      
+      let compacted = 0;
+      let failed = 0;
+      for (const session of agentSessions) {
+        try {
+          await request("sessions.compact", { key: session.key });
+          compacted++;
+        } catch {
+          failed++;
+        }
+      }
+      
+      if (compacted > 0) {
+        toast.success(`Compacted ${compacted} session${compacted !== 1 ? "s" : ""} for ${agent.name || agent.id}`);
+      }
+      if (failed > 0) {
+        toast.error(`Failed to compact ${failed} session${failed !== 1 ? "s" : ""}`);
+      }
+      if (compacted === 0 && failed === 0) {
+        toast.info("No sessions to compact");
+      }
     } catch (error) {
       console.error("Failed to compact sessions:", error);
       toast.error(error instanceof Error ? error.message : "Failed to compact sessions");
@@ -163,6 +188,9 @@ export function AgentCard({ agent }: AgentCardProps) {
                 {agent.name || agent.id}
               </CardTitle>
               <div className="flex items-center gap-2 mt-0.5">
+                {agent.name && agent.name !== agent.id && (
+                  <span className="text-xs text-zinc-500 font-mono">{agent.id}</span>
+                )}
                 <Badge
                   variant="secondary"
                   className={cn("text-xs", status.textColor, "bg-zinc-800")}
@@ -170,7 +198,7 @@ export function AgentCard({ agent }: AgentCardProps) {
                   {status.label}
                 </Badge>
                 {agent.model && (
-                  <span className="text-xs text-zinc-500">{agent.model}</span>
+                  <span className="text-xs text-zinc-500">{(agent.model || "").split("/").pop()}</span>
                 )}
               </div>
             </div>

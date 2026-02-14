@@ -10,23 +10,79 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-interface CostEntry {
+interface CostTableProps {
+  data: any[];
+}
+
+interface NormalizedEntry {
+  date: string;
   provider: string;
   model: string;
-  input_tokens: number;
-  output_tokens: number;
-  input_cost: number;
-  output_cost: number;
-  total_cost: number;
-  timestamp: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalCost: number;
 }
 
-interface CostTableProps {
-  data: CostEntry[];
+function normalizeEntries(rawData: any[]): NormalizedEntry[] {
+  const entries: NormalizedEntry[] = [];
+
+  for (const item of rawData) {
+    // codexbar daily format: { date, totalCost, inputTokens, outputTokens, modelBreakdowns: [{modelName, cost}] }
+    if (item.date && item.modelBreakdowns) {
+      for (const model of item.modelBreakdowns) {
+        entries.push({
+          date: item.date,
+          provider: "", // Not in daily breakdown
+          model: model.modelName || "unknown",
+          inputTokens: model.inputTokens || 0,
+          outputTokens: model.outputTokens || 0,
+          totalCost: model.cost || 0,
+        });
+      }
+      // If no model breakdowns but has total
+      if (item.modelBreakdowns.length === 0 && item.totalCost > 0) {
+        entries.push({
+          date: item.date,
+          provider: "",
+          model: "unknown",
+          inputTokens: item.inputTokens || 0,
+          outputTokens: item.outputTokens || 0,
+          totalCost: item.totalCost || 0,
+        });
+      }
+    }
+    // Pre-normalized format: { timestamp, provider, model, total_cost, ... }
+    else if (item.timestamp || item.provider || item.model) {
+      entries.push({
+        date: item.timestamp || item.date || "",
+        provider: item.provider || "",
+        model: item.model || "",
+        inputTokens: item.input_tokens || item.inputTokens || 0,
+        outputTokens: item.output_tokens || item.outputTokens || 0,
+        totalCost: item.total_cost || item.totalCost || item.cost || 0,
+      });
+    }
+  }
+
+  // Sort by date descending
+  return entries.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-function formatDate(timestamp: string): string {
-  return new Date(timestamp).toLocaleString("en-US", {
+function formatDate(dateStr: string): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr; // Return raw string if can't parse
+  
+  // If it's just a date (YYYY-MM-DD), show that
+  if (dateStr.length === 10) {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+  
+  return date.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -35,7 +91,7 @@ function formatDate(timestamp: string): string {
 }
 
 export function CostTable({ data }: CostTableProps) {
-  if (data.length === 0) {
+  if (!data || data.length === 0) {
     return (
       <Card className="bg-zinc-900 border-zinc-800">
         <CardHeader>
@@ -50,8 +106,22 @@ export function CostTable({ data }: CostTableProps) {
     );
   }
 
-  // Show last 20 entries
-  const recentData = data.slice(0, 20);
+  const entries = normalizeEntries(data).slice(0, 30);
+
+  if (entries.length === 0) {
+    return (
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardHeader>
+          <CardTitle className="text-lg text-zinc-100">Recent Usage</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-32 flex items-center justify-center text-zinc-500">
+            No usage data available
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="bg-zinc-900 border-zinc-800">
@@ -63,8 +133,10 @@ export function CostTable({ data }: CostTableProps) {
           <Table>
             <TableHeader>
               <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-400">Time</TableHead>
-                <TableHead className="text-zinc-400">Provider</TableHead>
+                <TableHead className="text-zinc-400">Date</TableHead>
+                {entries.some(e => e.provider) && (
+                  <TableHead className="text-zinc-400">Provider</TableHead>
+                )}
                 <TableHead className="text-zinc-400">Model</TableHead>
                 <TableHead className="text-zinc-400 text-right">Input</TableHead>
                 <TableHead className="text-zinc-400 text-right">Output</TableHead>
@@ -72,26 +144,28 @@ export function CostTable({ data }: CostTableProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {recentData.map((entry, index) => (
+              {entries.map((entry, index) => (
                 <TableRow
-                  key={`${entry.timestamp}-${index}`}
+                  key={`${entry.date}-${entry.model}-${index}`}
                   className="border-zinc-800"
                 >
                   <TableCell className="text-zinc-300">
-                    {formatDate(entry.timestamp)}
+                    {formatDate(entry.date)}
                   </TableCell>
-                  <TableCell className="text-zinc-300">{entry.provider}</TableCell>
+                  {entries.some(e => e.provider) && (
+                    <TableCell className="text-zinc-300">{entry.provider || "—"}</TableCell>
+                  )}
                   <TableCell className="text-zinc-400 text-sm">
                     {entry.model}
                   </TableCell>
                   <TableCell className="text-zinc-400 text-right">
-                    {(entry.input_tokens ?? 0).toLocaleString()}
+                    {entry.inputTokens > 0 ? entry.inputTokens.toLocaleString() : "—"}
                   </TableCell>
                   <TableCell className="text-zinc-400 text-right">
-                    {(entry.output_tokens ?? 0).toLocaleString()}
+                    {entry.outputTokens > 0 ? entry.outputTokens.toLocaleString() : "—"}
                   </TableCell>
                   <TableCell className="text-zinc-100 text-right font-medium">
-                    ${(entry.total_cost ?? 0).toFixed(4)}
+                    ${entry.totalCost.toFixed(4)}
                   </TableCell>
                 </TableRow>
               ))}
