@@ -84,25 +84,17 @@ export function KanbanBoard({
     e.dataTransfer.dropEffect = "move";
   };
 
-  // Use grid for ≤5 columns, flex with scroll for more
-  const useGrid = visibleColumns.length <= 5;
-
   return (
-    <div className={useGrid ? "" : "overflow-x-auto"}>
+    <div className="overflow-x-auto">
       <div
-        className={
-          useGrid
-            ? `grid grid-cols-1 md:grid-cols-3 lg:grid-cols-${Math.min(visibleColumns.length, 5)} gap-3`
-            : "flex gap-3 pb-4"
-        }
-        style={useGrid ? undefined : { minWidth: "max-content" }}
+        className="grid gap-3 pb-4"
+        style={{
+          gridTemplateColumns: `repeat(${visibleColumns.length}, minmax(220px, 1fr))`,
+          minWidth: visibleColumns.length > 4 ? `${visibleColumns.length * 230}px` : undefined,
+        }}
       >
         {visibleColumns.map((column) => (
-          <div
-            key={column.id}
-            className={useGrid ? "" : ""}
-            style={useGrid ? undefined : { minWidth: "260px", maxWidth: "300px" }}
-          >
+          <div key={column.id}>
             <KanbanColumn
               title={column.title}
               color={column.color}

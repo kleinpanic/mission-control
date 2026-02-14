@@ -154,11 +154,15 @@ export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, on
         {/* Tags (compact) */}
         {task.tags && task.tags.length > 0 && (
           <div className="flex gap-1 flex-wrap">
-            {task.tags.slice(0, 3).map((tag) => (
-              <span key={tag} className="text-[10px] px-1 py-0 bg-zinc-700/50 text-zinc-500 rounded">
-                {tag}
-              </span>
-            ))}
+            {task.tags
+              .map(tag => tag.replace(/[\[\]"]/g, '').trim()) // Clean corrupted JSON fragments
+              .filter(tag => tag.length > 0)
+              .slice(0, 3)
+              .map((tag) => (
+                <span key={tag} className="text-[10px] px-1 py-0 bg-zinc-700/50 text-zinc-500 rounded">
+                  {tag}
+                </span>
+              ))}
             {task.tags.length > 3 && (
               <span className="text-[10px] text-zinc-600">+{task.tags.length - 3}</span>
             )}
