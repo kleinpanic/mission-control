@@ -127,6 +127,9 @@ export interface Task {
   projectId?: string | null;
   source?: string;
   recommendedModel?: string | null;
+  reminderId?: string | null;
+  reminderList?: string | null;
+  reminderSyncedAt?: string | null;
 }
 
 // ===== Cost Types =====

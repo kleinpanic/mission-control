@@ -13,9 +13,15 @@ interface KanbanBoardProps {
 }
 
 const columns: { id: TaskStatus; title: string; color: string }[] = [
-  { id: "intake", title: "Intake", color: "border-zinc-600" },
+  { id: "intake", title: "Intake", color: "border-purple-500" },
+  { id: "ready", title: "Ready", color: "border-cyan-500" },
+  { id: "backlog", title: "Backlog", color: "border-zinc-500" },
   { id: "in_progress", title: "In Progress", color: "border-blue-500" },
+  { id: "review", title: "Review", color: "border-yellow-500" },
+  { id: "paused", title: "Paused", color: "border-orange-500" },
+  { id: "blocked", title: "Blocked", color: "border-red-500" },
   { id: "completed", title: "Completed", color: "border-green-500" },
+  { id: "archived", title: "Archived", color: "border-zinc-700" },
 ];
 
 export function KanbanBoard({
@@ -64,20 +70,23 @@ export function KanbanBoard({
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-h-[500px]">
-      {columns.map((column) => (
-        <KanbanColumn
-          key={column.id}
-          title={column.title}
-          color={column.color}
-          tasks={tasksByStatus[column.id] || []}
-          onDragStart={handleDragStart}
-          onDrop={(e) => handleDrop(e, column.id)}
-          onDragOver={handleDragOver}
-          onEditTask={onEditTask}
-          onDeleteTask={onDeleteTask}
-        />
-      ))}
+    <div className="overflow-x-auto">
+      <div className="flex gap-4 min-h-[500px] pb-4" style={{ minWidth: "max-content" }}>
+        {columns.map((column) => (
+          <div key={column.id} style={{ minWidth: "300px", maxWidth: "350px" }}>
+            <KanbanColumn
+              title={column.title}
+              color={column.color}
+              tasks={tasksByStatus[column.id] || []}
+              onDragStart={handleDragStart}
+              onDrop={(e) => handleDrop(e, column.id)}
+              onDragOver={handleDragOver}
+              onEditTask={onEditTask}
+              onDeleteTask={onDeleteTask}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
