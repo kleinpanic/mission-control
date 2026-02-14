@@ -201,7 +201,13 @@ export function GatewayProvider({ children }: Props) {
       };
       
       ws.onerror = (error) => {
-        console.error("[Gateway] WebSocket error:", error);
+        // WebSocket error events don't contain detailed info in browsers
+        // Log connection state instead for debugging
+        console.error("[Gateway] WebSocket error occurred", {
+          readyState: ws.readyState,
+          url: resolvedUrl,
+          // Error event itself has no useful enumerable properties
+        });
         setConnectionStatus("error", "Connection error");
       };
       
@@ -261,7 +267,11 @@ export function GatewayProvider({ children }: Props) {
         }
       }
       
-      const id = crypto.randomUUID();
+      // crypto.randomUUID() is only available in secure contexts (HTTPS/localhost)
+      // Fall back to a manual UUID for plain HTTP on LAN
+      const id = typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
       
       // Set timeout (30 seconds)
       const timer = setTimeout(() => {
