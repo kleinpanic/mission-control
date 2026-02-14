@@ -47,6 +47,7 @@ interface CostHistoryData {
   monthly: CostHistoryEntry[];
   byAgent: Record<string, number>;
   byModel: Record<string, number>;
+  byProvider: Record<string, number>;
 }
 
 export default function CostsPage() {
