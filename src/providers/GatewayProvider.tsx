@@ -174,11 +174,10 @@ export function GatewayProvider({ children }: Props) {
           return "ws://127.0.0.1:18789";
         }
         
-        // Use the WS proxy endpoint when accessed remotely (LAN/WAN).
-        // The custom server proxies /api/gateway/ws -> localhost:18789.
+        // Direct connection to gateway WebSocket on port 18789
+        // (no proxy needed - gateway listens on all interfaces)
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const port = window.location.port;
-        return `${protocol}//${hostname}${port ? `:${port}` : ""}/api/gateway/ws`;
+        return `${protocol}//${hostname}:18789`;
       }
       
       return "ws://127.0.0.1:18789";
