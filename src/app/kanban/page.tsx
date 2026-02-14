@@ -89,6 +89,14 @@ export default function KanbanPage() {
     }
   };
 
+  const handleApproveTask = async (taskId: string) => {
+    await handleMoveTask(taskId, "ready");
+  };
+
+  const handleRejectTask = async (taskId: string) => {
+    await handleMoveTask(taskId, "archived");
+  };
+
   return (
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between">
@@ -109,6 +117,8 @@ export default function KanbanPage() {
           onMoveTask={handleMoveTask}
           onEditTask={setEditingTask}
           onDeleteTask={handleDeleteTask}
+          onApproveTask={handleApproveTask}
+          onRejectTask={handleRejectTask}
         />
       </div>
 

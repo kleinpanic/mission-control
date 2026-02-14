@@ -10,6 +10,8 @@ interface KanbanBoardProps {
   onMoveTask: (id: string, status: TaskStatus) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
+  onApproveTask?: (taskId: string) => void;
+  onRejectTask?: (taskId: string) => void;
 }
 
 const columns: { id: TaskStatus; title: string; color: string }[] = [
@@ -30,6 +32,8 @@ export function KanbanBoard({
   onMoveTask,
   onEditTask,
   onDeleteTask,
+  onApproveTask,
+  onRejectTask,
 }: KanbanBoardProps) {
   if (loading) {
     return (
@@ -77,12 +81,15 @@ export function KanbanBoard({
             <KanbanColumn
               title={column.title}
               color={column.color}
+              status={column.id}
               tasks={tasksByStatus[column.id] || []}
               onDragStart={handleDragStart}
               onDrop={(e) => handleDrop(e, column.id)}
               onDragOver={handleDragOver}
               onEditTask={onEditTask}
               onDeleteTask={onDeleteTask}
+              onApproveTask={onApproveTask}
+              onRejectTask={onRejectTask}
             />
           </div>
         ))}
