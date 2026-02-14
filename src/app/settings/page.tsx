@@ -31,15 +31,17 @@ interface GatewayConfig {
   channels: string[];
 }
 
-const AVAILABLE_MODELS = [
-  { value: "default", label: "Default (gpt-5.2)" },
-  { value: "gpt-5.2", label: "GPT-5.2 (OpenAI)" },
-  { value: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-  { value: "anthropic/claude-opus-4-5", label: "Claude Opus 4.5" },
-  { value: "anthropic-nick/claude-opus-4-5", label: "Claude Opus 4.5 (Nick)" },
-  { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash" },
-  { value: "google/gemini-3-pro-preview", label: "Gemini 3 Pro" },
-];
+function getAvailableModels(defaultModel?: string) {
+  return [
+    { value: "default", label: defaultModel ? `Default (${defaultModel})` : "Default" },
+    { value: "gpt-5.2", label: "GPT-5.2 (OpenAI)" },
+    { value: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+    { value: "anthropic/claude-opus-4-5", label: "Claude Opus 4.5" },
+    { value: "anthropic-nick/claude-opus-4-5", label: "Claude Opus 4.5 (Nick)" },
+    { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash" },
+    { value: "google/gemini-3-pro-preview", label: "Gemini 3 Pro" },
+  ];
+}
 
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -87,6 +89,10 @@ export default function SettingsPage() {
           
           // Extract channels from config
           const channels = configResult?.config?.channels ? Object.keys(configResult.config.channels) : [];
+          
+          // Debug logging
+          console.log('[Settings] Config result:', configResult);
+          console.log('[Settings] Extracted channels:', channels);
           
           setConfig({
             defaultModel,
@@ -253,7 +259,7 @@ export default function SettingsPage() {
                       <SelectValue placeholder="Select model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {AVAILABLE_MODELS.map((model) => (
+                      {getAvailableModels(config?.defaultModel).map((model) => (
                         <SelectItem key={model.value} value={model.value}>
                           {model.label}
                         </SelectItem>
