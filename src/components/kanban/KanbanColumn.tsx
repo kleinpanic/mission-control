@@ -53,7 +53,7 @@ export function KanbanColumn({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[200px] max-h-[600px]">
+      <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[100px] sm:min-h-[200px] max-h-[400px] sm:max-h-[600px]">
         {tasks.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <p className="text-xs text-zinc-600">Drop tasks here</p>

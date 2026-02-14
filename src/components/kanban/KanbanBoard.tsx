@@ -87,9 +87,10 @@ export function KanbanBoard({
   return (
     <div className="overflow-x-auto">
       <div
-        className="grid gap-3 pb-4"
+        className="grid gap-3 pb-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
         style={{
-          gridTemplateColumns: `repeat(${visibleColumns.length}, minmax(180px, 1fr))`,
+          // On large screens, show all columns
+          ...(visibleColumns.length <= 5 ? {} : {}),
         }}
       >
         {visibleColumns.map((column) => (
