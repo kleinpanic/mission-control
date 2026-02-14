@@ -91,7 +91,7 @@ export interface CronJob {
 
 // ===== Task Types (Kanban — shared with oc-tasks) =====
 
-export type TaskStatus = 'intake' | 'ready' | 'backlog' | 'in_progress' | 'review' | 'blocked' | 'completed' | 'archived';
+export type TaskStatus = 'intake' | 'ready' | 'backlog' | 'in_progress' | 'review' | 'paused' | 'blocked' | 'completed' | 'archived';
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
 export type TaskComplexity = 'trivial' | 'simple' | 'moderate' | 'complex' | 'epic';
 export type TaskDanger = 'safe' | 'low' | 'medium' | 'high' | 'critical';
