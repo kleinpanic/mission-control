@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
 
         // Model aggregation from breakdowns
         for (const model of day.modelBreakdowns) {
-          const modelCost = model.cost || 0;
+          const modelCost = typeof model.cost === 'number' ? model.cost : 0;
           if (!summary.byModel[model.modelName]) {
             summary.byModel[model.modelName] = 0;
           }
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
             model: model.modelName,
             input_tokens: day.inputTokens,
             output_tokens: day.outputTokens,
-            total_cost: model.cost,
+            total_cost: modelCost,
           });
         }
       }

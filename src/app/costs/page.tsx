@@ -83,14 +83,25 @@ export default function CostsPage() {
         console.log('[Costs] Data received:', finalCostResult);
         
         // Handle both raw codexbar format and aggregated format
-        const isAggregated = !!finalCostResult.summary;
-        const summary = isAggregated ? finalCostResult.summary : {
-          today: finalCostResult.today ?? 0,
-          week: finalCostResult.week ?? 0,
-          month: finalCostResult.month ?? 0,
-          byProvider: finalCostResult.byProvider ?? {},
-          byModel: finalCostResult.byModel ?? {},
-        };
+        let summary;
+        if (finalCostResult.summary) {
+          summary = finalCostResult.summary;
+        } else {
+          // Calculate summary from raw data if missing (e.g. from WebSocket)
+          const daily = finalCostResult.daily || [];
+          const totals = finalCostResult.totals || {};
+          
+          const nowStr = new Date().toISOString().slice(0, 10);
+          const todayEntry = daily.find((d: any) => d.date === nowStr);
+          
+          summary = {
+            today: todayEntry?.totalCost ?? finalCostResult.today ?? 0,
+            week: finalCostResult.week ?? totals.totalCost ?? 0, // Fallback to totals if week aggregation missing
+            month: finalCostResult.month ?? totals.totalCost ?? 0,
+            byProvider: finalCostResult.byProvider ?? {},
+            byModel: finalCostResult.byModel ?? {},
+          };
+        }
 
         setData({
           summary: {
@@ -100,7 +111,7 @@ export default function CostsPage() {
             byProvider: summary.byProvider ?? {},
             byModel: summary.byModel ?? {},
           },
-          raw: finalCostResult.raw || finalCostResult.entries || [],
+          raw: finalCostResult.raw || finalCostResult.entries || finalCostResult.daily || [],
           billingAccount: finalCostResult.billingAccount || finalCostResult.account,
           providers: finalCostResult.providers || extractProviders(finalCostResult),
         });

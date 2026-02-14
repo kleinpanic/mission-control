@@ -174,7 +174,7 @@ export default function Dashboard() {
           agents,
           sessions: {
             total: statusResult?.sessions?.count || 0,
-            atCapacity: 0,
+            atCapacity: statusResult?.sessions?.recent?.filter((s: any) => s.percentUsed >= 95).length || 0,
           },
           heartbeat: {
             defaultAgentId: statusResult?.heartbeat?.defaultAgentId || agentsResult?.defaultId || "main",
