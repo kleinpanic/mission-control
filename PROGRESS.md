@@ -24,15 +24,15 @@ Current: Phase 2 - Data Display Fixes
 - [x] **Costs page:** "cost by agent", "by provider", "By Model" show no data (only "Cost By Model" works)
 - [x] **Cron page:** Shows "10 total, 10 active, 0 disabled" - should show disabled crons (FIXED: added --all flag - 76be168)
 - [x] **Settings:** All agents show "default: gpt-5.2" (wrong default model) (FIXED: fetch from gateway config - 26e612b)
-- [ ] **Settings:** Connected channels shows nothing (should show Slack, WhatsApp, etc.)
+- [x] **Settings:** Connected channels shows nothing (should show Slack, WhatsApp, etc.) (FIXED: fetch from config - 4fd54c0)
 - [ ] **Analytics:** Shows "4 errors" - investigate
 
 ### P1: Functionality Fixes
-- [ ] **Sessions compaction:** "11 eligible" → ran → "0 compacted" (didn't work)
+- [x] **Sessions compaction:** "11 eligible" → ran → "0 compacted" (ROOT CAUSE: OpenClaw compaction is automatic, not manual. UI calls non-existent `sessions.compact` method. Need to remove manual compaction UI and show automatic compaction info instead.)
 - [ ] **Agent status contradictions:**
   - Dev shows "disabled" heartbeat but also "waiting" status
   - Meta shows "waiting" but shouldn't be doing anything
-- [ ] **Session cleanup:** 55 total sessions - needs cleanup
+- [ ] **Session cleanup:** 55 total sessions - needs cleanup (separate task)
 
 ### P2: UI/UX Improvements
 - [ ] **Kanban:** UI "kinda shitty looking now" - needs visual polish
@@ -48,12 +48,15 @@ Current: Phase 2 - Data Display Fixes
 
 ## Next Steps
 
-1. **Investigate cost data structure** - why only "Cost By Model" works
-2. **Fix cron list filtering** - include disabled crons
-3. **Fix settings default model** - read from actual gateway config
-4. **Fix agent status logic** - resolve disabled/waiting contradiction
-5. **Implement working session compaction** - actually compact the eligible sessions
-6. **Polish Kanban UI** - improve visual design
+1. ~~**Investigate cost data structure**~~ ✅ DONE (Klein fixed: d5f5b8d)
+2. ~~**Fix cron list filtering**~~ ✅ DONE (76be168)
+3. ~~**Fix settings default model**~~ ✅ DONE (26e612b)  
+4. ~~**Fix settings channels**~~ ✅ DONE (4fd54c0)
+5. **Analytics "4 errors"** → Working as designed (shows real error-level log entries)
+6. **Fix session compaction** → Need to remove manual compaction UI (OpenClaw compaction is automatic)
+7. **Fix agent status logic** - resolve disabled/waiting contradiction
+8. **Polish Kanban UI** - improve visual design
+9. **Session cleanup** - reduce 55 total sessions (separate cleanup task)
 
 ## Files Modified
 - `src/providers/GatewayProvider.tsx` - crypto.randomUUID fix + proxy routing
