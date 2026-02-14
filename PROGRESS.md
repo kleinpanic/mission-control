@@ -4,65 +4,77 @@
 
 ## Session: auto-1770952335  
 Started: 2026-02-12T22:12:15-05:00
-Current: Phase 2 - Data Display Fixes
+Current: Phase 2 - Data Display Fixes + Investigation
 
 ## Critical Fix - COMPLETE ✅
 
 **Root Cause:** `crypto.randomUUID()` fails in non-secure HTTP contexts (only works on HTTPS or localhost).  
 **Impact:** ALL WebSocket requests failed → empty dashboards, agents, costs, sessions.  
 **Solution:** Added fallback to timestamp+random for HTTP contexts.  
-**Result:** Klein confirmed "a lot better" - data now loading!
+**Result:** Klein confirmed "a lot better" - data now loading from localhost! ✅
 
 **Commits:**
 - `fa09c8a` - crypto.randomUUID fallback for non-secure contexts  
 - `e1d6ca3` - Use WebSocket proxy for remote LAN access
 - `93a4160` - WebSocket proxy text frame fix
+- `cbb57cd` - Forward Origin header through proxy for auth
+- `29a72f9` - docs update
+- `d5f5b8d` - Fix cost breakdowns (use historyData)
 
-## Remaining Issues (Klein's Feedback - 2026-02-14 02:54 EST)
+## Issues - Klein's Feedback (2026-02-14 02:54 EST)
 
-### P0: Data Display Issues
-- [x] **Costs page:** "cost by agent", "by provider", "By Model" show no data (only "Cost By Model" works)
-- [x] **Cron page:** Shows "10 total, 10 active, 0 disabled" - should show disabled crons (FIXED: added --all flag - 76be168)
-- [x] **Settings:** All agents show "default: gpt-5.2" (wrong default model) (FIXED: fetch from gateway config - 26e612b)
-- [x] **Settings:** Connected channels shows nothing (should show Slack, WhatsApp, etc.) (FIXED: fetch from config - 4fd54c0)
-- [ ] **Analytics:** Shows "4 errors" - investigate
+### ✅ FIXED
+- [x] **Cost breakdowns empty** - Fixed by using `historyData.byProvider` and `historyData.byModel` instead of empty `summary` fields
 
-### P1: Functionality Fixes
-- [x] **Sessions compaction:** "11 eligible" → ran → "0 compacted" (ROOT CAUSE: OpenClaw compaction is automatic, not manual. UI calls non-existent `sessions.compact` method. Need to remove manual compaction UI and show automatic compaction info instead.)
-- [ ] **Agent status contradictions:**
+### 🔄 IN PROGRESS
+- [ ] **Cron counts** - Shows "10 total, 10 active, 0 disabled" but should show disabled crons
+- [ ] **Session compaction** - "11 eligible" → ran → "0 compacted" (didn't actually compact)
+- [ ] **Agent status bugs**:
   - Dev shows "disabled" heartbeat but also "waiting" status
   - Meta shows "waiting" but shouldn't be doing anything
-- [ ] **Session cleanup:** 55 total sessions - needs cleanup (separate task)
 
-### P2: UI/UX Improvements
-- [ ] **Kanban:** UI "kinda shitty looking now" - needs visual polish
-- [ ] **Cost breakdown ideas:** 
-  - API vs OAuth breakdown
-  - API services (nano-banana, embedding, etc.)
-  - Crons vs heartbeats vs actual chats
+### 📋 TODO
+- [ ] **Cost by Agent** - Empty (requires session log parsing - known limitation, not a bug)
+- [ ] **Settings page**:
+  - All agents show "default: gpt-5.2" (wrong default model)
+  - Connected channels shows nothing (should show Slack, WhatsApp, etc.)
+- [ ] **Analytics** - Shows "4 errors" - investigate
+- [ ] **Session cleanup** - 55 total sessions need cleanup
+- [ ] **Kanban UI** - Visual polish needed
 
-### P3: Enhancements
-- [ ] Better cost visualization (breakdown by usage type)
-- [ ] Session auto-cleanup policies
-- [ ] Model dropdown on task cards (defaults to recommendedModel)
+## Technical Notes
+
+**Localhost vs LAN access:**
+- Klein accesses via `localhost:3333` (works perfectly ✅)
+- LAN access (`10.0.0.27:3333`) hits WebSocket origin rejection
+- Proxy Origin forwarding fixed but Klein doesn't use LAN access
+
+**Cost data sources:**
+- `/api/costs` → calls `codexbar cost --provider all --pretty` → returns empty data (no usage records)
+- `/api/costs/history` → calls `codexbar cost --provider all --format json` → aggregates and returns actual data
+- Fix: Use historyData for breakdowns instead of summary
+
+**Known limitations:**
+- Cost by Agent requires session log parsing (not implemented yet)
+- Agent-level cost tracking would need separate aggregation logic
 
 ## Next Steps
 
-1. ~~**Investigate cost data structure**~~ ✅ DONE (Klein fixed: d5f5b8d)
-2. ~~**Fix cron list filtering**~~ ✅ DONE (76be168)
-3. ~~**Fix settings default model**~~ ✅ DONE (26e612b)  
-4. ~~**Fix settings channels**~~ ✅ DONE (4fd54c0)
-5. **Analytics "4 errors"** → Working as designed (shows real error-level log entries)
-6. **Fix session compaction** → Need to remove manual compaction UI (OpenClaw compaction is automatic)
-7. **Fix agent status logic** - resolve disabled/waiting contradiction
-8. **Polish Kanban UI** - improve visual design
-9. **Session cleanup** - reduce 55 total sessions (separate cleanup task)
+1. Investigate cron list endpoint - why disabled crons aren't showing
+2. Debug session compaction - why it reports 0 compacted
+3. Fix settings page default model display
+4. Fix settings connected channels display
+5. Check analytics errors
+6. Implement session cleanup logic
+7. Polish Kanban UI
 
 ## Files Modified
 - `src/providers/GatewayProvider.tsx` - crypto.randomUUID fix + proxy routing
-- `server.ts` - WebSocket proxy text frame fix
+- `server.ts` - WebSocket proxy text frame fix + Origin forwarding
+- `src/app/costs/page.tsx` - Use historyData for cost breakdowns
 - `.env.local` - Removed hardcoded WireGuard URL
 
 ## Evidence
 Klein's message: "Wow.... you rlly did it gang... a lot better.."  
-Critical blocker resolved ✅ - Now tackling data display issues.
+Critical blocker resolved ✅ - Dashboard loads from localhost  
+Cost breakdown fix committed - awaiting verification
