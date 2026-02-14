@@ -58,9 +58,10 @@ export default function SettingsPage() {
       
       setLoading(true);
       try {
-        const [agentsResult, statusResult] = await Promise.all([
+        const [agentsResult, statusResult, configResult] = await Promise.all([
           request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
           request<any>("status").catch(e => { console.error("status error:", e); return null; }),
+          request<any>("gateway.config.get").catch(e => { console.error("gateway.config.get error:", e); return null; }),
         ]);
         
         if (agentsResult && statusResult) {
@@ -72,15 +73,30 @@ export default function SettingsPage() {
             heartbeatByAgent.set(hb.agentId, hb);
           });
           
+          // Extract default model and context from config
+          const defaultModel = configResult?.config?.agents?.defaults?.model?.primary || "anthropic/claude-sonnet-4-5";
+          const contextTokens = configResult?.config?.session?.contextTokens || 200000;
+          
+          // Extract agent models from config
+          const agentConfigs = new Map<string, any>();
+          if (configResult?.config?.agents?.list) {
+            configResult.config.agents.list.forEach((a: any) => {
+              agentConfigs.set(a.id, a.model);
+            });
+          }
+          
           setConfig({
-            defaultModel: "gpt-5.2",
-            contextTokens: 200000,
+            defaultModel,
+            contextTokens,
             agents: agents.map((a: any) => {
               const heartbeat = heartbeatByAgent.get(a.id);
+              const agentModelConfig = agentConfigs.get(a.id);
+              const modelPrimary = agentModelConfig?.primary || defaultModel;
+              
               return {
                 id: a.id,
                 name: a.name,
-                model: a.model,
+                model: modelPrimary,
                 heartbeatInterval: heartbeat?.every || "—",
               };
             }),
