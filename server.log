@@ -31,3 +31,13 @@ Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allow
  GET /api/sessions 200 in 4.2s (compile: 20ms, render: 4.2s)
  GET /api/sessions 200 in 9ms (compile: 5ms, render: 4ms)
 ✓ Compiled in 26ms
+✓ Compiled in 162ms
+ GET /api/sessions 200 in 7.7s (compile: 5ms, render: 7.7s)
+Persisting failed: Unable to write SST file 00000088.sst
+
+Caused by:
+    No such file or directory (os error 2)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+✓ Compiled in 53ms
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)

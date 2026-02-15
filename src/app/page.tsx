@@ -49,6 +49,7 @@ interface StatusData {
   sessions: {
     total: number;
     atCapacity: number;
+    recent?: any[];
   };
   heartbeat: {
     defaultAgentId: string;
@@ -176,6 +177,7 @@ export default function Dashboard() {
           sessions: {
             total: statusResult?.sessions?.count || 0,
             atCapacity: statusResult?.sessions?.recent?.filter((s: any) => s.percentUsed >= 95).length || 0,
+            recent: statusResult?.sessions?.recent || [],
           },
           heartbeat: {
             defaultAgentId: statusResult?.heartbeat?.defaultAgentId || agentsResult?.defaultId || "main",
@@ -583,7 +585,7 @@ export default function Dashboard() {
       </div>
 
       {/* Agent Activity & Swarm */}
-      <AgentActivity className="bg-zinc-900 border-zinc-800" />
+      <AgentActivity sessions={status?.sessions.recent || []} />
 
       {/* Recent Activity */}
       <Card className="bg-zinc-900 border-zinc-800">

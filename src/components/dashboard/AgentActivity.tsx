@@ -1,163 +1,234 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Users, Zap, GitBranch } from "lucide-react";
+import { 
+  Zap, 
+  Cpu, 
+  Layers, 
+  ArrowRight, 
+  Activity,
+  CircleDot
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
-interface Session {
+interface SubagentSession {
   key: string;
-  label: string | null;
   agentId: string;
+  label?: string;
+  status: "active" | "idle" | "waiting";
   model: string;
-  status: string;
-  totalTokens: number;
   parentKey?: string;
+  children: SubagentSession[];
+  updatedAt: number;
+}
+
+interface ActivityMetrics {
+  swarmWorkers: number;
+  activeSubagents: number;
+  concurrentToolCalls: number;
+  multiToolUse: boolean;
 }
 
 interface AgentActivityProps {
-  className?: string;
+  sessions: any[];
 }
 
-export function AgentActivity({ className }: AgentActivityProps) {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading] = useState(true);
+export function AgentActivity({ sessions = [] }: AgentActivityProps) {
+  const [hierarchy, setHierarchy] = useState<SubagentSession[]>([]);
+  const [metrics, setMetrics] = useState<ActivityMetrics>({
+    swarmWorkers: 0,
+    activeSubagents: 0,
+    concurrentToolCalls: 0,
+    multiToolUse: false
+  });
 
   useEffect(() => {
-    fetchSessions();
-    const interval = setInterval(fetchSessions, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, []);
+    if (!sessions || !Array.isArray(sessions)) return;
 
-  async function fetchSessions() {
-    try {
-      const res = await fetch('/api/sessions');
-      const data = await res.json();
-      setSessions(data.sessions || []);
-    } catch (error) {
-      console.error('Failed to fetch sessions:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
+    // 1. Process sessions into a hierarchy
+    const sessionMap = new Map<string, SubagentSession>();
+    const roots: SubagentSession[] = [];
 
-  // Group sessions by agent
-  const agentGroups = sessions.reduce((acc, session) => {
-    const agent = session.agentId || 'unknown';
-    if (!acc[agent]) acc[agent] = [];
-    acc[agent].push(session);
-    return acc;
-  }, {} as Record<string, Session[]>);
+    // First pass: Create nodes
+    sessions.forEach(s => {
+      const session: SubagentSession = {
+        key: s.key,
+        agentId: s.agentId,
+        label: s.label || s.displayName,
+        status: s.percentUsed >= 95 ? "waiting" : (Date.now() - s.updatedAt < 30000 ? "active" : "idle"),
+        model: s.model || "unknown",
+        children: [],
+        updatedAt: s.updatedAt
+      };
 
-  // Find subagents and swarms (sessions with parent relationships)
-  const hierarchicalSessions = sessions.filter(s => s.parentKey || s.label?.includes('swarm'));
+      // Try to determine parent from key: agent:dev:subagent:ID -> parent is agent:dev:main
+      if (s.key.includes(':subagent:')) {
+        const parts = s.key.split(':');
+        if (parts.length >= 3) {
+          const agentId = parts[1];
+          session.parentKey = `agent:${agentId}:main`;
+        }
+      }
 
-  if (loading) {
-    return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Agent Activity
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        </CardContent>
-      </Card>
-    );
+      sessionMap.set(s.key, session);
+    });
+
+    // Second pass: Build tree
+    sessionMap.forEach(session => {
+      if (session.parentKey && sessionMap.has(session.parentKey)) {
+        sessionMap.get(session.parentKey)!.children.push(session);
+      } else {
+        // Roots: either main agents or subagents with no resolved parent in the current list
+        if (session.children.length > 0 || session.key.includes(':subagent:') || session.key.endsWith(':main')) {
+          roots.push(session);
+        }
+      }
+    });
+
+    // Sort roots by status (active first) then updatedAt
+    const sortedRoots = roots
+      .filter(r => r.children.length > 0 || r.key.includes(':subagent:'))
+      .sort((a, b) => {
+        if (a.status === "active" && b.status !== "active") return -1;
+        if (a.status !== "active" && b.status === "active") return 1;
+        return b.updatedAt - a.updatedAt;
+      });
+
+    setHierarchy(sortedRoots);
+
+    // 2. Calculate metrics
+    const swarmWorkers = sessions.filter(s => s.model?.includes('flash')).length;
+    const activeSubagents = sessions.filter(s => s.key.includes(':subagent:')).length;
+    const concurrentToolCalls = sessions.filter(s => (Date.now() - s.updatedAt < 10000)).length;
+
+    setMetrics({
+      swarmWorkers,
+      activeSubagents,
+      concurrentToolCalls,
+      multiToolUse: concurrentToolCalls > 1
+    });
+  }, [sessions]);
+
+  if (hierarchy.length === 0 && metrics.swarmWorkers === 0) {
+    return null; // Don't show if no relevant activity
   }
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Agent Activity
-          <Badge variant="outline" className="ml-auto">
-            {sessions.length} active
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Hierarchical sessions (subagents, swarms) */}
-        {hierarchicalSessions.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <GitBranch className="h-4 w-4" />
-              Parallel Work
-            </div>
-            <div className="space-y-1">
-              {hierarchicalSessions.map((session) => (
-                <div
-                  key={session.key}
-                  className="flex items-center justify-between rounded-md bg-muted/50 p-2 text-sm"
-                >
-                  <div className="flex items-center gap-2">
-                    {session.label?.includes('swarm') ? (
-                      <Zap className="h-4 w-4 text-yellow-500" />
-                    ) : (
-                      <GitBranch className="h-4 w-4 text-blue-500" />
-                    )}
-                    <span className="font-mono text-xs">
-                      {session.label || session.key.split(':').slice(-1)[0]}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">
-                      {session.agentId}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {Math.round(session.totalTokens / 1000)}k tokens
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+    <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
+      <CardHeader className="border-b border-zinc-800/50 bg-zinc-900/50">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg text-zinc-100 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-400" />
+              Agent Activity & Swarm
+            </CardTitle>
+            <CardDescription className="text-zinc-400">
+              Real-time parallel execution and subagent hierarchy
+            </CardDescription>
           </div>
-        )}
-
-        {/* Agent breakdown */}
-        <div className="space-y-2">
-          <div className="text-sm font-medium text-muted-foreground">
-            By Agent
-          </div>
-          <div className="grid gap-2">
-            {Object.entries(agentGroups)
-              .sort((a, b) => b[1].length - a[1].length)
-              .map(([agentId, agentSessions]) => (
-                <div
-                  key={agentId}
-                  className="flex items-center justify-between rounded-md border p-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <Badge variant="default">{agentId}</Badge>
-                    <span className="text-sm text-muted-foreground">
-                      {agentSessions.length} session{agentSessions.length !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {agentSessions.some(s => s.label?.includes('swarm')) && (
-                      <Zap className="h-4 w-4 text-yellow-500" />
-                    )}
-                    {agentSessions.some(s => s.parentKey) && (
-                      <GitBranch className="h-4 w-4 text-blue-500" />
-                    )}
-                  </div>
-                </div>
-              ))}
+          <div className="flex gap-4">
+            <MetricBadge 
+              icon={<Cpu className="w-3 h-3" />} 
+              label="Swarm" 
+              value={metrics.swarmWorkers} 
+              color="text-blue-400"
+            />
+            <MetricBadge 
+              icon={<Layers className="w-3 h-3" />} 
+              label="Subagents" 
+              value={metrics.activeSubagents} 
+              color="text-purple-400"
+            />
+            <MetricBadge 
+              icon={<Activity className="w-3 h-3" />} 
+              label="Tools" 
+              value={metrics.concurrentToolCalls} 
+              color="text-emerald-400"
+            />
           </div>
         </div>
-
-        {/* Empty state */}
-        {sessions.length === 0 && (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            No active sessions
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="divide-y divide-zinc-800">
+          {hierarchy.map(node => (
+            <ActivityNode key={node.key} node={node} level={0} />
+          ))}
+        </div>
+        {hierarchy.length === 0 && (
+          <div className="py-8 text-center text-zinc-500 text-sm">
+            No active subagent hierarchies detected
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function MetricBadge({ icon, label, value, color }: { icon: any, label: string, value: number, color: string }) {
+  return (
+    <div className="flex flex-col items-end">
+      <span className="text-[10px] text-zinc-500 uppercase font-semibold">{label}</span>
+      <div className={cn("flex items-center gap-1 font-mono text-sm font-bold", color)}>
+        {icon}
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function ActivityNode({ node, level }: { node: SubagentSession, level: number }) {
+  const isParent = node.children.length > 0;
+  
+  return (
+    <div className={cn(
+      "group transition-colors hover:bg-zinc-800/30",
+      level === 0 ? "bg-zinc-900" : "bg-transparent"
+    )}>
+      <div className="flex items-center gap-3 p-3" style={{ paddingLeft: `${level * 24 + 12}px` }}>
+        {level > 0 && <ArrowRight className="w-3 h-3 text-zinc-600" />}
+        
+        <div className="relative">
+          <CircleDot className={cn(
+            "w-4 h-4",
+            node.status === "active" ? "text-emerald-500 animate-pulse" : 
+            node.status === "waiting" ? "text-amber-500" : "text-zinc-600"
+          )} />
+          {node.status === "active" && (
+            <span className="absolute -inset-1 bg-emerald-500/20 rounded-full animate-ping" />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-zinc-200 text-sm truncate">
+              {node.label || node.agentId}
+            </span>
+            <Badge variant="outline" className="text-[9px] h-4 py-0 px-1 text-zinc-500 border-zinc-800">
+              {node.model.split('/').pop()}
+            </Badge>
+          </div>
+          {level === 0 && isParent && (
+            <p className="text-[10px] text-zinc-500">Parent Agent ({node.agentId})</p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Badge className={cn(
+            "text-[9px] font-bold px-1.5 py-0",
+            node.status === "active" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+            node.status === "waiting" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+            "bg-zinc-800 text-zinc-500 border-transparent"
+          )}>
+            {node.status.toUpperCase()}
+          </Badge>
+        </div>
+      </div>
+      
+      {node.children.map(child => (
+        <ActivityNode key={child.key} node={child} level={level + 1} />
+      ))}
+    </div>
   );
 }
