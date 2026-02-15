@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { X, Send, History, User, Bot, RefreshCw } from "lucide-react";
+import { X, Send, User, Bot, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SessionDetailProps {
