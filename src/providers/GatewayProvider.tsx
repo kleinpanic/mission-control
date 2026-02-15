@@ -319,9 +319,19 @@ export function GatewayProvider({ children }: Props) {
   }, []);
 
   useEffect(() => {
-    connect();
+    // Only connect once on mount - don't depend on connect function
+    // to prevent reconnection loops from dependency changes
+    let mounted = true;
+    
+    const doConnect = () => {
+      if (!mounted) return;
+      connect();
+    };
+    
+    doConnect();
     
     return () => {
+      mounted = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
@@ -331,7 +341,8 @@ export function GatewayProvider({ children }: Props) {
       pendingRef.current.forEach(({ timer }) => clearTimeout(timer));
       pendingRef.current.clear();
     };
-  }, [connect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - connect only on mount
 
   const value: GatewayContextType = {
     connected,
