@@ -76,20 +76,27 @@ export async function GET() {
       return NextResponse.json(statusCache);
     }
 
-    // Get OpenClaw status
+    // Get OpenClaw status - pipe through grep to remove plugin log lines
     const { stdout: statusJson } = await execAsync(
-      'openclaw status --json 2>/dev/null | grep -v "^\\[" | head -500'
+      'openclaw status --json 2>/dev/null | grep -v "^\\["',
+      { maxBuffer: 10 * 1024 * 1024 } // 10MB buffer for large outputs
     );
 
     let statusData: any = {};
     try {
-      // Find the JSON object in the output (skip plugin messages)
-      const jsonMatch = statusJson.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        statusData = JSON.parse(jsonMatch[0]);
-      }
+      // The output should be valid JSON after removing plugin messages
+      statusData = JSON.parse(statusJson.trim());
     } catch (parseError) {
-      console.error("Failed to parse status JSON:", parseError);
+      console.error("Failed to parse status JSON:", parseError, "Raw length:", statusJson.length);
+      // Try to find a JSON object if direct parse fails
+      const jsonMatch = statusJson.match(/^\{[\s\S]*\}$/m);
+      if (jsonMatch) {
+        try {
+          statusData = JSON.parse(jsonMatch[0]);
+        } catch {
+          console.error("Fallback JSON parse also failed");
+        }
+      }
     }
 
     // Build agents info
