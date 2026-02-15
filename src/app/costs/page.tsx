@@ -93,7 +93,10 @@ export default function CostsPage() {
           const totals = finalCostResult.totals || {};
           
           const now = new Date();
-          const nowStr = now.toISOString().slice(0, 10);
+          // Use local date for "today" comparison (not UTC) to match user's timezone
+          const localOffset = now.getTimezoneOffset() * 60 * 1000;
+          const localDate = new Date(now.getTime() - localOffset);
+          const nowStr = localDate.toISOString().slice(0, 10);
           const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
           const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
           
