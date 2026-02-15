@@ -14,7 +14,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, Bot, Play, Pause, ArrowRight, RotateCcw, CheckCircle, Archive, Send } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Bot, Play, Pause, ArrowRight, RotateCcw, CheckCircle, Archive, Send, GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TaskCardProps {
@@ -26,6 +26,7 @@ interface TaskCardProps {
   onDelete: () => void;
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onDispatchTask?: (taskId: string, agentId: string) => void;
+  onDecompose?: () => void;
 }
 
 const priorityColors: Record<string, string> = {
@@ -74,7 +75,7 @@ function getQuickActions(status: TaskStatus): { label: string; target: TaskStatu
   }
 }
 
-export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDelete, onMoveTask, onDispatchTask }: TaskCardProps) {
+export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDelete, onMoveTask, onDispatchTask, onDecompose }: TaskCardProps) {
   const priority = priorityColors[task.priority] || priorityColors.medium;
   const quickActions = getQuickActions(columnStatus);
   const canDispatch = agents && agents.length > 0 && onDispatchTask && ["ready", "intake", "backlog"].includes(columnStatus);
@@ -105,6 +106,13 @@ export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDe
               <DropdownMenuItem onClick={onEdit} className="text-zinc-300 focus:bg-zinc-700 text-xs">
                 <Pencil className="w-3 h-3 mr-2" /> Edit
               </DropdownMenuItem>
+              
+              {/* Decompose Task */}
+              {onDecompose && (
+                <DropdownMenuItem onClick={onDecompose} className="text-zinc-300 focus:bg-zinc-700 text-xs">
+                  <GitBranch className="w-3 h-3 mr-2" /> Decompose
+                </DropdownMenuItem>
+              )}
               
               {/* Dispatch to Agent submenu */}
               {canDispatch && (

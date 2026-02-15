@@ -15,6 +15,7 @@ interface KanbanBoardProps {
   onApproveTask?: (taskId: string) => void;
   onRejectTask?: (taskId: string) => void;
   onDispatchTask?: (taskId: string, agentId: string) => void;
+  onDecomposeTask?: (task: Task) => void;
 }
 
 // Column metadata with descriptions for info tooltips
@@ -52,6 +53,7 @@ export function KanbanBoard({
   onApproveTask,
   onRejectTask,
   onDispatchTask,
+  onDecomposeTask,
 }: KanbanBoardProps) {
   if (loading) {
     return (
@@ -120,6 +122,7 @@ export function KanbanBoard({
               onApproveTask={onApproveTask}
               onRejectTask={onRejectTask}
               onDispatchTask={onDispatchTask}
+              onDecomposeTask={onDecomposeTask}
             />
           </div>
         ))}

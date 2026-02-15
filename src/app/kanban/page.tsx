@@ -5,6 +5,7 @@ import { useTasksStore } from "@/stores/tasks";
 import { useGateway } from "@/providers/GatewayProvider";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskModal } from "@/components/kanban/TaskModal";
+import { DecomposeModal } from "@/components/kanban/DecomposeModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, RefreshCw } from "lucide-react";
@@ -15,6 +16,7 @@ export default function KanbanPage() {
   const { tasks, setTasks, addTask, updateTask, deleteTask, moveTask } = useTasksStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [decomposeTask, setDecomposeTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
@@ -232,6 +234,7 @@ export default function KanbanPage() {
           onApproveTask={handleApproveTask}
           onRejectTask={handleRejectTask}
           onDispatchTask={handleDispatchTask}
+          onDecomposeTask={setDecomposeTask}
         />
       </div>
 
@@ -245,6 +248,19 @@ export default function KanbanPage() {
         task={editingTask}
         agents={agents}
       />
+
+      {decomposeTask && (
+        <DecomposeModal
+          open={!!decomposeTask}
+          onClose={() => setDecomposeTask(null)}
+          taskId={decomposeTask.id}
+          taskTitle={decomposeTask.title}
+          onDecomposed={() => {
+            setDecomposeTask(null);
+            handleRefresh();
+          }}
+        />
+      )}
     </div>
   );
 }
