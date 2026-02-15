@@ -118,15 +118,16 @@ export function KanbanBoard({
   };
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto h-full">
       <div
-        className="grid gap-4 pb-4"
+        className="grid gap-4 pb-4 h-full"
         style={{
           gridTemplateColumns: `repeat(auto-fit, minmax(280px, 1fr))`,
+          gridAutoRows: '1fr',
         }}
       >
         {visibleColumns.map((column) => (
-          <div key={column.id}>
+          <div key={column.id} className="h-full">
             <KanbanColumn
               title={column.title}
               color={column.color}
