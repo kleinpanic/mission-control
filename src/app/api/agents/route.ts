@@ -49,6 +49,29 @@ export async function GET() {
       heartbeatByAgent[hb.agentId] = hb;
     });
     
+    // Build auth mode map from config.auth.profiles and config.models.providers
+    const authProfiles = config.auth?.profiles || {};
+    const modelProviders = config.models?.providers || {};
+    
+    // Map provider prefix to auth mode
+    const providerAuthMode: Record<string, string> = {};
+    for (const [profileKey, profile] of Object.entries(authProfiles)) {
+      const p = profile as any;
+      if (p.provider) {
+        providerAuthMode[p.provider] = p.mode || "unknown";
+      }
+    }
+    // Infer from model provider config (apiKey = api, baseUrl with localhost = local)
+    for (const [providerId, providerConfig] of Object.entries(modelProviders)) {
+      const pc = providerConfig as any;
+      if (providerAuthMode[providerId]) continue; // auth profile takes precedence
+      if (pc.baseUrl?.includes("localhost") || pc.baseUrl?.includes("127.0.0.1")) {
+        providerAuthMode[providerId] = "local";
+      } else if (pc.apiKey) {
+        providerAuthMode[providerId] = "api";
+      }
+    }
+    
     // Combine agent config with runtime data
     const agentList = config.agents?.list || [];
     const agents = agentList.map((agent: any) => {
@@ -68,12 +91,27 @@ export async function GET() {
         status = "active";
       }
       
+      // Determine model string and provider
+      const modelStr = typeof agent.model === "string" ? agent.model : (agent.model?.primary || "default");
+      const providerId = modelStr.includes("/") ? modelStr.split("/")[0] : "default";
+      const authMode = providerAuthMode[providerId] || "unknown";
+      
+      // Get fallback models with their auth modes
+      const fallbacks = (typeof agent.model === "object" && agent.model?.fallbacks) 
+        ? (agent.model.fallbacks as string[]).map((fb: string) => {
+            const fbProvider = fb.includes("/") ? fb.split("/")[0] : "default";
+            return { model: fb, authMode: providerAuthMode[fbProvider] || "unknown" };
+          })
+        : [];
+      
       return {
         id: agent.id,
         name: agent.name || agent.id,
         enabled: agent.enabled !== false,
         status,
-        model: typeof agent.model === "string" ? agent.model : (agent.model?.primary || "default"),
+        model: modelStr,
+        authMode, // "oauth" | "api" | "token" | "local" | "unknown"
+        fallbacks,
         sessions: sessions.length,
         heartbeatInterval: heartbeat?.every || "unknown",
         lastActivity: mostRecent ? new Date(mostRecent.updatedAt).toISOString() : null,

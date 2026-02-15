@@ -11,6 +11,7 @@ interface ProviderCooldown {
   active: boolean;
   remainingMs: number;
   remainingHuman: string;
+  authMode?: string; // "oauth" | "api" | "token" | "local" | "unknown"
 }
 
 interface AgentRateLimits {
@@ -34,12 +35,30 @@ export async function GET() {
     const agentsDir = join(homedir(), '.openclaw', 'agents');
     const configPath = join(homedir(), '.openclaw', 'openclaw.json');
     
-    // Get agent names from config
+    // Get agent names and auth modes from config
     const agentNames = new Map<string, string>();
+    const providerAuthModes = new Map<string, string>();
     try {
       const config = JSON.parse(await readFile(configPath, 'utf-8'));
       for (const agent of config.agents?.list || []) {
         agentNames.set(agent.id, agent.name || agent.id);
+      }
+      // Extract auth modes from auth.profiles
+      for (const [, profile] of Object.entries(config.auth?.profiles || {})) {
+        const p = profile as any;
+        if (p.provider && p.mode) {
+          providerAuthModes.set(p.provider, p.mode);
+        }
+      }
+      // Infer from model providers
+      for (const [providerId, pc] of Object.entries(config.models?.providers || {})) {
+        if (providerAuthModes.has(providerId)) continue;
+        const conf = pc as any;
+        if (conf.baseUrl?.includes('localhost') || conf.baseUrl?.includes('127.0.0.1')) {
+          providerAuthModes.set(providerId, 'local');
+        } else if (conf.apiKey) {
+          providerAuthModes.set(providerId, 'api');
+        }
       }
     } catch {}
 
@@ -74,12 +93,15 @@ export async function GET() {
           if (cooldownUntil) {
             const active = cooldownUntil > now;
             const remainingMs = Math.max(0, cooldownUntil - now);
+            // Extract base provider name for auth mode lookup
+            const baseProvider = providerKey.split(':')[0];
             cooldowns.push({
               provider: providerKey.replace(/:default$/, '').replace(/:manual$/, ''),
               cooldownUntil,
               active,
               remainingMs,
               remainingHuman: formatRemaining(remainingMs),
+              authMode: providerAuthModes.get(baseProvider) || providerAuthModes.get(providerKey) || 'unknown',
             });
           }
         }

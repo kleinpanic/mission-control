@@ -154,6 +154,7 @@ export default function AgentsPage() {
             name: agent.name || agent.id,
             status,
             model: mostRecentSession?.model || agent.model || null,
+            authMode: agent.authMode || "unknown",
             lastActivity,
             activeSession: mostRecentSession?.key || null,
             heartbeatNext,
