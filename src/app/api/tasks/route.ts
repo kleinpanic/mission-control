@@ -16,6 +16,10 @@ export async function GET(request: NextRequest) {
     const tag = searchParams.get('tag');
     const backburnered = searchParams.get('backburnered');
     const sort = searchParams.get('sort');
+    
+    // Pagination parameters
+    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : undefined;
+    const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!, 10) : 0;
 
     const filters: any = {};
 
@@ -32,8 +36,27 @@ export async function GET(request: NextRequest) {
     if (backburnered !== null) filters.backburnered = backburnered === 'true';
     if (sort) filters.sort = sort;
 
-    const tasks = getTasks(filters);
-    return NextResponse.json({ tasks });
+    // Get all matching tasks
+    const allTasks = getTasks(filters);
+    const total = allTasks.length;
+    
+    // Apply pagination if requested
+    const tasks = limit !== undefined
+      ? allTasks.slice(offset, offset + limit)
+      : allTasks;
+    
+    // Return with pagination metadata
+    const response: any = { tasks };
+    if (limit !== undefined) {
+      response.pagination = {
+        total,
+        offset,
+        limit,
+        hasMore: offset + limit < total,
+      };
+    }
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Tasks GET error:', error);
     return NextResponse.json(
