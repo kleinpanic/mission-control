@@ -111,9 +111,9 @@ export function AgentActivity({ sessions = [] }: AgentActivityProps) {
     });
   }, [sessions]);
 
-  if (hierarchy.length === 0 && metrics.swarmWorkers === 0) {
-    return null; // Don't show if no relevant activity
-  }
+  // if (hierarchy.length === 0 && metrics.swarmWorkers === 0) {
+  //   return null; // Don't show if no relevant activity
+  // }
 
   return (
     <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
