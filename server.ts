@@ -11,7 +11,6 @@ import { config } from "dotenv";
 import { resolve } from "path";
 
 // Load .env.local before anything else (tsx doesn't auto-load Next.js env files)
-// override: true ensures .env.local takes precedence over inherited env vars
 config({ path: resolve(process.cwd(), ".env.local"), override: true });
 config({ path: resolve(process.cwd(), ".env") });
 
@@ -43,13 +42,18 @@ app.prepare().then(() => {
     const { pathname } = new URL(req.url || "/", `http://${req.headers.host}`);
 
     if (pathname === "/api/gateway/ws") {
+      console.log("[WS Proxy] Client upgrade request received");
+      
       wss.handleUpgrade(req, socket, head, (clientWs) => {
+        console.log("[WS Proxy] Client WebSocket created, readyState:", clientWs.readyState);
+        
         let gatewayWs: WebSocket | null = null;
         let clientClosed = false;
         let gatewayClosed = false;
         let clientAuthenticated = !MC_PASSWORD; // auto-auth if no password set
         let gatewayConnected = false;
-        let pendingMessages: string[] = [];
+        let pendingToClient: string[] = []; // Messages from gateway waiting for client
+        let pendingToGateway: string[] = []; // Messages from client waiting for gateway
 
         // Connect to the real gateway
         gatewayWs = new WebSocket(GATEWAY_URL, {
@@ -59,33 +63,54 @@ app.prepare().then(() => {
         });
 
         gatewayWs.on("open", () => {
-          console.log("[WS Proxy] Connected to gateway, sending handshake...");
+          console.log("[WS Proxy] Connected to gateway");
+          gatewayConnected = true;
           
-          // CRITICAL: Gateway expects connect handshake as FIRST message
-          // Send it immediately with the real gateway token
-          const connectMsg = {
-            type: "req",
-            id: "gateway-connect",
-            method: "connect",
-            params: {
-              minProtocol: 3,
-              maxProtocol: 3,
-              client: {
-                id: "cli",
-                version: "1.2.0",
-                platform: "node",
-                mode: "cli"
-              },
-              role: "operator",
-              scopes: ["operator.admin"],
-              auth: {
-                token: GATEWAY_TOKEN
+          // Flush any pending messages to gateway
+          if (pendingToGateway.length > 0) {
+            console.log("[WS Proxy] Flushing", pendingToGateway.length, "pending messages to gateway");
+            for (const msg of pendingToGateway) {
+              gatewayWs!.send(msg);
+            }
+            pendingToGateway = [];
+          }
+        });
+
+        // Helper to safely send to client with buffering
+        const sendToClient = (data: string) => {
+          console.log("[WS Proxy] Sending to client, readyState:", clientWs.readyState);
+          
+          if (clientWs.readyState === WebSocket.OPEN) {
+            try {
+              clientWs.send(data);
+              console.log("[WS Proxy] Message sent to client successfully");
+            } catch (e: any) {
+              console.error("[WS Proxy] Error sending to client:", e.message);
+            }
+          } else if (clientWs.readyState === WebSocket.CONNECTING) {
+            console.log("[WS Proxy] Client still connecting, buffering message");
+            pendingToClient.push(data);
+          } else {
+            console.log("[WS Proxy] Client not open (state:", clientWs.readyState, "), dropping message");
+          }
+        };
+
+        // Flush buffered messages when client is ready
+        // The 'open' event on the server side of ws fires when handleUpgrade completes
+        // but the browser might not be fully ready yet - use setImmediate to ensure
+        // the JavaScript event loop has completed
+        setImmediate(() => {
+          if (pendingToClient.length > 0 && clientWs.readyState === WebSocket.OPEN) {
+            console.log("[WS Proxy] Flushing", pendingToClient.length, "buffered messages to client");
+            for (const msg of pendingToClient) {
+              try {
+                clientWs.send(msg);
+              } catch (e: any) {
+                console.error("[WS Proxy] Error flushing to client:", e.message);
               }
             }
-          };
-          
-          gatewayWs!.send(JSON.stringify(connectMsg));
-          // Note: gatewayConnected will be set to true when we receive connect response
+            pendingToClient = [];
+          }
         });
 
         // Proxy: client -> gateway
@@ -93,12 +118,15 @@ app.prepare().then(() => {
         clientWs.on("message", (data, isBinary) => {
           const raw = isBinary ? data : data.toString();
           const str = typeof raw === "string" ? raw : raw.toString();
+          console.log("[WS Proxy] Client message:", str.substring(0, 100));
 
           try {
             const msg = JSON.parse(str);
 
             // Intercept connect handshake — inject real gateway token
             if (msg.type === "req" && msg.method === "connect") {
+              console.log("[WS Proxy] Intercepting connect request, injecting token");
+              
               // Check MC password if configured
               if (MC_PASSWORD && !clientAuthenticated) {
                 const clientPassword = msg.params?.auth?.mcPassword || msg.params?.auth?.password || "";
@@ -125,9 +153,11 @@ app.prepare().then(() => {
 
               const rewritten = JSON.stringify(msg);
               if (gatewayConnected && gatewayWs?.readyState === WebSocket.OPEN) {
+                console.log("[WS Proxy] Forwarding connect to gateway with token");
                 gatewayWs.send(rewritten);
               } else {
-                pendingMessages.push(rewritten);
+                console.log("[WS Proxy] Gateway not ready, queueing connect request");
+                pendingToGateway.push(rewritten);
               }
               return;
             }
@@ -149,71 +179,52 @@ app.prepare().then(() => {
           if (gatewayConnected && gatewayWs?.readyState === WebSocket.OPEN) {
             gatewayWs.send(str);
           } else {
-            pendingMessages.push(str);
+            pendingToGateway.push(str);
           }
         });
 
         // Proxy: gateway -> client
         gatewayWs.on("message", (data, isBinary) => {
-          const dataStr = data.toString();
+          const str = data.toString();
+          console.log("[WS Proxy] Gateway message:", str.substring(0, 100));
           
-          // Handle server-to-gateway messages (do not forward to client)
+          // Try to identify the message type
           try {
-            const msg = JSON.parse(dataStr);
-            
-            // Gateway challenge event (newer protocol - server already sent connect)
+            const msg = JSON.parse(str);
             if (msg.type === "event" && msg.event === "connect.challenge") {
-              console.log("[WS Proxy] Received connect.challenge (connect request already sent)");
-              // We already sent the connect request in on("open"), so just ignore this
-              return;
+              console.log("[WS Proxy] Forwarding connect.challenge to client");
             }
-            
-            // Server-side connect response
-            if (msg.type === "res" && msg.id === "gateway-connect") {
-              if (msg.ok) {
-                console.log("[WS Proxy] Gateway authenticated successfully");
-                gatewayConnected = true;
-                // Flush pending messages now that gateway is authenticated
-                for (const pendingMsg of pendingMessages) {
-                  gatewayWs!.send(pendingMsg);
-                }
-                pendingMessages = [];
-              } else {
-                console.error("[WS Proxy] Gateway auth failed:", msg.error);
-                clientWs.close(4002, "Gateway authentication failed");
-                gatewayWs!.close();
-              }
-              return; // Don't forward server connect response to client
-            }
-            
-            // Slack -> Kanban Integration
+          } catch {
+            // ignore
+          }
+          
+          sendToClient(str);
+
+          // Slack -> Kanban Integration
+          try {
+            const msg = JSON.parse(str);
             if (msg.type === "event" && msg.event === "message.channel") {
               handleSlackMessage(msg.payload);
             }
           } catch (e) {
-            // Not JSON or other error, continue
-          }
-          
-          // Forward all other messages to client
-          if (clientWs.readyState === WebSocket.OPEN) {
-            clientWs.send(dataStr, { binary: false });
+            // Not JSON or other error, ignore
           }
         });
 
-        clientWs.on("close", () => {
+        clientWs.on("close", (code, reason) => {
           clientClosed = true;
+          console.log(`[WS Proxy] Client disconnected: code=${code}, reason=${reason}`);
           if (!gatewayClosed && gatewayWs) {
             gatewayWs.close();
           }
-          console.log("[WS Proxy] Client disconnected");
         });
 
-        gatewayWs.on("close", () => {
+        gatewayWs.on("close", (code, reason) => {
           gatewayClosed = true;
+          console.log(`[WS Proxy] Gateway disconnected: code=${code}, reason=${reason}`);
           if (!clientClosed) {
             clientWs.close();
           }
-          console.log("[WS Proxy] Gateway disconnected");
         });
 
         clientWs.on("error", (err) => {
