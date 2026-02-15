@@ -174,6 +174,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const permanent = searchParams.get('permanent') === 'true';
 
     if (!id) {
       return NextResponse.json(
@@ -182,6 +183,28 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    // Soft delete by default: move to archived status
+    if (!permanent) {
+      const task = updateTask(id, { status: 'archived' });
+      
+      if (!task) {
+        return NextResponse.json(
+          { error: 'Task not found' },
+          { status: 404 }
+        );
+      }
+
+      // Log archive activity
+      logTaskActivity(id, 'archived', 'ui', task.status, 'archived');
+
+      return NextResponse.json({ 
+        success: true, 
+        archived: true,
+        task 
+      });
+    }
+
+    // Permanent delete: remove from database
     const success = deleteTask(id);
 
     if (!success) {
@@ -191,7 +214,14 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ success: true });
+    // Log permanent deletion
+    logTaskActivity(id, 'deleted', 'ui', null, 'permanent');
+
+    return NextResponse.json({ 
+      success: true, 
+      archived: false,
+      permanent: true 
+    });
   } catch (error) {
     console.error('Tasks DELETE error:', error);
     return NextResponse.json(
