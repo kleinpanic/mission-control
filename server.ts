@@ -59,13 +59,33 @@ app.prepare().then(() => {
         });
 
         gatewayWs.on("open", () => {
-          console.log("[WS Proxy] Connected to gateway");
-          gatewayConnected = true;
-          // Flush any pending messages
-          for (const msg of pendingMessages) {
-            gatewayWs!.send(msg);
-          }
-          pendingMessages = [];
+          console.log("[WS Proxy] Connected to gateway, sending handshake...");
+          
+          // CRITICAL: Gateway expects connect handshake as FIRST message
+          // Send it immediately with the real gateway token
+          const connectMsg = {
+            type: "req",
+            id: "gateway-connect",
+            method: "connect",
+            params: {
+              minProtocol: 3,
+              maxProtocol: 3,
+              client: {
+                id: "mission-control-proxy",
+                version: "1.2.0",
+                platform: "node",
+                mode: "proxy"
+              },
+              role: "operator",
+              scopes: ["operator.admin"],
+              auth: {
+                token: GATEWAY_TOKEN
+              }
+            }
+          };
+          
+          gatewayWs!.send(JSON.stringify(connectMsg));
+          // Note: gatewayConnected will be set to true when we receive connect response
         });
 
         // Proxy: client -> gateway
@@ -135,18 +155,48 @@ app.prepare().then(() => {
 
         // Proxy: gateway -> client
         gatewayWs.on("message", (data, isBinary) => {
-          if (clientWs.readyState === WebSocket.OPEN) {
-            clientWs.send(data.toString(), { binary: false });
-          }
-
-          // Slack -> Kanban Integration
+          const dataStr = data.toString();
+          
+          // Handle server-to-gateway messages (do not forward to client)
           try {
-            const msg = JSON.parse(data.toString());
+            const msg = JSON.parse(dataStr);
+            
+            // Gateway challenge event (newer protocol - server already sent connect)
+            if (msg.type === "event" && msg.event === "connect.challenge") {
+              console.log("[WS Proxy] Received connect.challenge (connect request already sent)");
+              // We already sent the connect request in on("open"), so just ignore this
+              return;
+            }
+            
+            // Server-side connect response
+            if (msg.type === "res" && msg.id === "gateway-connect") {
+              if (msg.ok) {
+                console.log("[WS Proxy] Gateway authenticated successfully");
+                gatewayConnected = true;
+                // Flush pending messages now that gateway is authenticated
+                for (const pendingMsg of pendingMessages) {
+                  gatewayWs!.send(pendingMsg);
+                }
+                pendingMessages = [];
+              } else {
+                console.error("[WS Proxy] Gateway auth failed:", msg.error);
+                clientWs.close(4002, "Gateway authentication failed");
+                gatewayWs!.close();
+              }
+              return; // Don't forward server connect response to client
+            }
+            
+            // Slack -> Kanban Integration
             if (msg.type === "event" && msg.event === "message.channel") {
               handleSlackMessage(msg.payload);
             }
           } catch (e) {
-            // Not JSON or other error, ignore
+            // Not JSON or other error, continue
+          }
+          
+          // Forward all other messages to client
+          if (clientWs.readyState === WebSocket.OPEN) {
+            clientWs.send(dataStr, { binary: false });
           }
         });
 
