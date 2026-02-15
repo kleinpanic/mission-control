@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings, Server, Database, Moon, Sun, Monitor, Bot, Cpu, RefreshCw, Save, Lock, Eye, EyeOff } from "lucide-react";
+import { Settings, Server, Database, Moon, Sun, Monitor, Bot, Cpu, RefreshCw, Save, Lock, Eye, EyeOff, ChevronDown, ChevronRight, MessageSquare, Hash, User, ArrowRight, Globe } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useGateway } from "@/providers/GatewayProvider";
 import { cn } from "@/lib/utils";
@@ -30,11 +30,38 @@ interface ModelOption {
   label: string;
 }
 
+interface ChannelSubChannel {
+  id: string;
+  type: string;
+  allow: boolean;
+  requireMention: boolean;
+  agentId?: string;
+  agentName?: string;
+}
+
+interface ChannelInfo {
+  id: string;
+  enabled: boolean;
+  mode?: string;
+  dmPolicy?: string;
+  groupPolicy?: string;
+  subChannels: ChannelSubChannel[];
+  config: Record<string, unknown>;
+}
+
+interface RoutingEntry {
+  agentId: string;
+  agentName: string;
+  channel: string;
+  target: string;
+}
+
 interface GatewayConfig {
   defaultModel: string;
   contextTokens: number;
   agents: AgentConfig[];
-  channels: string[];
+  channels: ChannelInfo[];
+  routing: RoutingEntry[];
   availableModels: ModelOption[];
 }
 
@@ -45,6 +72,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [modelOverrides, setModelOverrides] = useState<Record<string, string>>({});
+  
+  // Channel expansion state
+  const [expandedChannels, setExpandedChannels] = useState<Set<string>>(new Set());
   
   // MC Password management
   const [mcPassword, setMcPassword] = useState("");
@@ -66,11 +96,12 @@ export default function SettingsPage() {
       
       setLoading(true);
       try {
-        const [agentsResult, statusResult, configResult, channelsResult] = await Promise.all([
+        const [agentsResult, statusResult, configResult, channelsResult, httpChannelsResult] = await Promise.all([
           request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
           request<any>("status").catch(e => { console.error("status error:", e); return null; }),
           request<any>("config.get").catch(e => { console.error("config.get error:", e); return null; }),
           request<any>("channels.status").catch(e => { console.error("channels.status error:", e); return null; }),
+          fetch("/api/channels").then(r => r.json()).catch(e => { console.error("channels API error:", e); return null; }),
         ]);
         
         if (agentsResult || statusResult) {
@@ -140,22 +171,9 @@ export default function SettingsPage() {
             }
           }
           
-          // Extract channels
-          let channels: string[] = [];
-          if (channelsResult?.channelMeta && Array.isArray(channelsResult.channelMeta) && channelsResult.channelMeta.length > 0) {
-            channels = channelsResult.channelMeta.map((ch: any) => 
-              ch.label || ch.detailLabel || ch.id || 'unknown'
-            );
-          } else if (channelsResult?.channelOrder && Array.isArray(channelsResult.channelOrder) && channelsResult.channelOrder.length > 0) {
-            channels = channelsResult.channelOrder;
-          }
-          
-          if (channels.length === 0 && configResult?.config?.channels) {
-            channels = Object.keys(configResult.config.channels).filter(key => {
-              const channelConfig = configResult.config.channels[key];
-              return channelConfig && (channelConfig.enabled !== false);
-            });
-          }
+          // Use enriched channel data from HTTP API
+          const channels: ChannelInfo[] = httpChannelsResult?.channels || [];
+          const routing: RoutingEntry[] = httpChannelsResult?.routing || [];
           
           setConfig({
             defaultModel,
@@ -174,6 +192,7 @@ export default function SettingsPage() {
               };
             }),
             channels,
+            routing,
           });
           
           // Initialize model overrides from config (not runtime agents.list)
@@ -542,28 +561,163 @@ export default function SettingsPage() {
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader>
             <CardTitle className="text-lg text-zinc-100 flex items-center gap-2">
-              <Settings className="w-5 h-5" />
+              <MessageSquare className="w-5 h-5" />
               Connected Channels
             </CardTitle>
             <CardDescription className="text-zinc-400">
-              Messaging channels configured in OpenClaw
+              Messaging channels, routing, and configuration
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {config?.channels && config.channels.length > 0 ? (
-                config.channels.map((channel, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2.5 bg-zinc-800/50 rounded-lg border border-zinc-700">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span className="text-sm font-medium text-zinc-200">{channel}</span>
-                  </div>
-                ))
+                config.channels.map((channel) => {
+                  const isExpanded = expandedChannels.has(channel.id);
+                  return (
+                    <div key={channel.id} className="rounded-lg border border-zinc-700 overflow-hidden">
+                      {/* Channel Header */}
+                      <button
+                        onClick={() => {
+                          const next = new Set(expandedChannels);
+                          if (isExpanded) next.delete(channel.id);
+                          else next.add(channel.id);
+                          setExpandedChannels(next);
+                        }}
+                        className="w-full flex items-center justify-between p-3 bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          {isExpanded ? <ChevronDown className="w-4 h-4 text-zinc-400" /> : <ChevronRight className="w-4 h-4 text-zinc-400" />}
+                          <div className={cn("w-2.5 h-2.5 rounded-full", channel.enabled ? "bg-emerald-400" : "bg-red-400")} />
+                          <span className="text-sm font-semibold text-zinc-100 capitalize">{channel.id}</span>
+                          {channel.mode && (
+                            <Badge variant="outline" className="text-[10px] text-zinc-400 border-zinc-600">
+                              {channel.mode}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className={cn("text-[10px]", channel.enabled ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : "bg-red-500/20 text-red-400 border-red-500/30")}>
+                            {channel.enabled ? "ENABLED" : "DISABLED"}
+                          </Badge>
+                          <span className="text-xs text-zinc-500">{channel.subChannels.length} routes</span>
+                        </div>
+                      </button>
+                      
+                      {/* Expanded Details */}
+                      {isExpanded && (
+                        <div className="border-t border-zinc-700 p-3 space-y-3">
+                          {/* Channel Config Summary */}
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                            {channel.dmPolicy && (
+                              <div className="bg-zinc-800 rounded p-2">
+                                <span className="text-zinc-500">DM Policy:</span>
+                                <span className="ml-1 text-zinc-200">{channel.dmPolicy}</span>
+                              </div>
+                            )}
+                            {channel.groupPolicy && (
+                              <div className="bg-zinc-800 rounded p-2">
+                                <span className="text-zinc-500">Group Policy:</span>
+                                <span className="ml-1 text-zinc-200">{channel.groupPolicy}</span>
+                              </div>
+                            )}
+                            {channel.mode && (
+                              <div className="bg-zinc-800 rounded p-2">
+                                <span className="text-zinc-500">Mode:</span>
+                                <span className="ml-1 text-zinc-200">{channel.mode}</span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Sub-channels / Routing */}
+                          {channel.subChannels.length > 0 && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Agent Routing</h4>
+                              <div className="space-y-1.5">
+                                {channel.subChannels.map((sub) => (
+                                  <div key={sub.id} className="flex items-center justify-between p-2 bg-zinc-800/30 rounded border border-zinc-700/50">
+                                    <div className="flex items-center gap-2">
+                                      {sub.type === 'dm' ? (
+                                        <User className="w-3.5 h-3.5 text-blue-400" />
+                                      ) : sub.type === 'wildcard' ? (
+                                        <Globe className="w-3.5 h-3.5 text-purple-400" />
+                                      ) : (
+                                        <Hash className="w-3.5 h-3.5 text-zinc-400" />
+                                      )}
+                                      <span className="text-xs font-mono text-zinc-300">{sub.id === '*' ? 'All' : sub.id}</span>
+                                      {!sub.allow && (
+                                        <Badge variant="outline" className="text-[9px] text-red-400 border-red-500/30">BLOCKED</Badge>
+                                      )}
+                                      {sub.requireMention && (
+                                        <Badge variant="outline" className="text-[9px] text-amber-400 border-amber-500/30">@mention</Badge>
+                                      )}
+                                    </div>
+                                    {sub.agentName ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <ArrowRight className="w-3 h-3 text-zinc-500" />
+                                        <Badge className="text-[10px] bg-blue-500/20 text-blue-400 border-blue-500/30">
+                                          {sub.agentName}
+                                        </Badge>
+                                      </div>
+                                    ) : (
+                                      <span className="text-[10px] text-zinc-500">default agent</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Raw Config (collapsible) */}
+                          {Object.keys(channel.config).length > 0 && (
+                            <details className="text-xs">
+                              <summary className="text-zinc-500 cursor-pointer hover:text-zinc-300 transition-colors">
+                                Raw Configuration
+                              </summary>
+                              <pre className="mt-2 p-2 bg-zinc-950 rounded text-zinc-400 overflow-x-auto text-[11px]">
+                                {JSON.stringify(channel.config, null, 2)}
+                              </pre>
+                            </details>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               ) : (
                 <p className="text-zinc-500 text-center py-4">No channels configured</p>
               )}
             </div>
           </CardContent>
         </Card>
+
+        {/* Agent Routing Summary */}
+        {config?.routing && config.routing.length > 0 && (
+          <Card className="bg-zinc-900 border-zinc-800">
+            <CardHeader>
+              <CardTitle className="text-lg text-zinc-100 flex items-center gap-2">
+                <ArrowRight className="w-5 h-5" />
+                Agent Routing
+              </CardTitle>
+              <CardDescription className="text-zinc-400">
+                How messages are routed to agents across channels
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1.5">
+                {config.routing.map((route, idx) => (
+                  <div key={idx} className="flex items-center gap-2 p-2.5 bg-zinc-800/30 rounded border border-zinc-700/50">
+                    <Badge variant="outline" className="text-[10px] capitalize border-zinc-600">{route.channel}</Badge>
+                    <span className="text-xs text-zinc-400">{route.target === 'all' ? 'All messages' : route.target}</span>
+                    <ArrowRight className="w-3 h-3 text-zinc-500 ml-auto" />
+                    <Badge className="text-[10px] bg-blue-500/20 text-blue-400 border-blue-500/30">
+                      {route.agentName}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Application Info */}
         <Card className="bg-zinc-900 border-zinc-800">
