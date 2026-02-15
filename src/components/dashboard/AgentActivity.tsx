@@ -56,11 +56,11 @@ export function AgentActivity({ sessions = [] }: AgentActivityProps) {
       const session: SubagentSession = {
         key: s.key,
         agentId: s.agentId,
-        label: s.label || s.displayName,
-        status: s.percentUsed >= 95 ? "waiting" : (Date.now() - s.updatedAt < 30000 ? "active" : "idle"),
+        label: s.label || s.displayName || s.key.split(':').pop(),
+        status: s.percentUsed >= 95 ? "waiting" : (Date.now() - (s.updatedAt || 0) < 60000 ? "active" : "idle"),
         model: s.model || "unknown",
         children: [],
-        updatedAt: s.updatedAt
+        updatedAt: s.updatedAt || 0
       };
 
       // Try to determine parent from key: agent:dev:subagent:ID -> parent is agent:dev:main
@@ -70,6 +70,10 @@ export function AgentActivity({ sessions = [] }: AgentActivityProps) {
           const agentId = parts[1];
           session.parentKey = `agent:${agentId}:main`;
         }
+      } else if (s.key.split(':').length > 3) {
+        // Fallback parent for other nested sessions
+        const parts = s.key.split(':');
+        session.parentKey = parts.slice(0, 3).join(':');
       }
 
       sessionMap.set(s.key, session);
@@ -81,15 +85,13 @@ export function AgentActivity({ sessions = [] }: AgentActivityProps) {
         sessionMap.get(session.parentKey)!.children.push(session);
       } else {
         // Roots: either main agents or subagents with no resolved parent in the current list
-        if (session.children.length > 0 || session.key.includes(':subagent:') || session.key.endsWith(':main')) {
-          roots.push(session);
-        }
+        // Include everything that isn't already a child
+        roots.push(session);
       }
     });
 
     // Sort roots by status (active first) then updatedAt
     const sortedRoots = roots
-      .filter(r => r.children.length > 0 || r.key.includes(':subagent:'))
       .sort((a, b) => {
         if (a.status === "active" && b.status !== "active") return -1;
         if (a.status !== "active" && b.status === "active") return 1;
@@ -99,9 +101,9 @@ export function AgentActivity({ sessions = [] }: AgentActivityProps) {
     setHierarchy(sortedRoots);
 
     // 2. Calculate metrics
-    const swarmWorkers = sessions.filter(s => s.model?.includes('flash')).length;
+    const swarmWorkers = sessions.filter(s => s.model?.toLowerCase().includes('flash')).length;
     const activeSubagents = sessions.filter(s => s.key.includes(':subagent:')).length;
-    const concurrentToolCalls = sessions.filter(s => (Date.now() - s.updatedAt < 10000)).length;
+    const concurrentToolCalls = sessions.filter(s => (Date.now() - (s.updatedAt || 0) < 20000)).length;
 
     setMetrics({
       swarmWorkers,
