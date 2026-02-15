@@ -504,9 +504,16 @@ export default function Dashboard() {
                     <h3 className="font-semibold text-zinc-100">{agent.name}</h3>
                     <p className="text-xs text-zinc-500">{agent.id}</p>
                   </div>
-                  <Badge className={cn("text-[10px]", getStatusColor(agent.status))}>
-                    {agent.status.toUpperCase()}
-                  </Badge>
+                  <div className="flex items-center gap-1.5">
+                    {rateLimits?.agents?.find((a: any) => a.agentId === agent.id)?.hasActiveCooldown && (
+                      <Badge className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30">
+                        LIMITED
+                      </Badge>
+                    )}
+                    <Badge className={cn("text-[10px]", getStatusColor(agent.status))}>
+                      {agent.status.toUpperCase()}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
