@@ -116,59 +116,19 @@ export default function Dashboard() {
       ]);
       
       if (agentsResult || statusResult) {
-        // Build a map of agent sessions from status (if available)
-        const sessionsByAgent = new Map<string, any[]>();
-        const heartbeatByAgent = new Map<string, any>();
-        
-        // Map sessions by agent (defensive: handle missing statusResult)
-        statusResult?.sessions?.byAgent?.forEach((agentSessions: any) => {
-          sessionsByAgent.set(agentSessions.agentId, agentSessions.recent || []);
-        });
-        
-        // Map heartbeat info by agent
-        statusResult?.heartbeat?.agents?.forEach((hb: any) => {
-          heartbeatByAgent.set(hb.agentId, hb);
-        });
-        
-        // Transform agents response to expected format, enriching with session data
-        const agents: AgentInfo[] = (agentsResult.agents || []).map((agent: any) => {
-          const sessions = sessionsByAgent.get(agent.id) || [];
-          const heartbeat = heartbeatByAgent.get(agent.id);
-          
-          // Find most recent activity across all sessions for this agent
-          let mostRecentSession = null;
-          for (const session of sessions) {
-            if (!mostRecentSession || (session.updatedAt || 0) > (mostRecentSession.updatedAt || 0)) {
-              mostRecentSession = session;
-            }
-          }
-          
-          const lastActivityMs = mostRecentSession?.updatedAt;
-          const lastActivity = lastActivityMs ? new Date(lastActivityMs).toISOString() : null;
-          
-          // Determine status based on session activity
-          const activeSessions = sessions.length;
-          const recentActivity = lastActivityMs && (Date.now() - lastActivityMs < 5 * 60 * 1000); // active if < 5min ago
-          const hasWaiting = sessions.some((s: any) => s.percentUsed >= 95);
-          
-          let status: "active" | "idle" | "waiting" | "error" = "idle";
-          if (hasWaiting) status = "waiting";
-          else if (recentActivity) status = "active";
-          
-          const percentages = sessions.map((s: any) => s.percentUsed || 0);
-          const maxPercent = percentages.length > 0 ? Math.max(...percentages, 0) : 0;
-          
+        // Use agents data directly from /api/agents (already enriched with runtime data)
+        const agents: AgentInfo[] = (agentsResult?.agents || []).map((agent: any) => {
           return {
             id: agent.id,
             name: agent.name || getAgentName(agent.id),
-            enabled: heartbeat?.enabled ?? true,
-            status,
-            model: mostRecentSession?.model || null,
-            heartbeatInterval: heartbeat?.every || "—",
-            lastActivity,
-            lastActivityAge: formatAge(lastActivity),
-            activeSessions,
-            maxSessionPercent: maxPercent,
+            enabled: agent.enabled !== false,
+            status: agent.status || "idle",
+            model: agent.model || null,
+            heartbeatInterval: agent.heartbeatInterval || "—",
+            lastActivity: agent.lastActivity || null,
+            lastActivityAge: formatAge(agent.lastActivity),
+            activeSessions: agent.sessions || 0,
+            maxSessionPercent: agent.contextUsage || 0,
           };
         });
 
