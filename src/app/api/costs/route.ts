@@ -66,6 +66,22 @@ export async function GET(request: NextRequest) {
     }
 
     const providers: CodexbarProviderData[] = JSON.parse(stdout);
+    
+    // Also fetch today's cost from text output (aggregated JSON doesn't include today yet)
+    let todayCostFromText = 0;
+    try {
+      const { stdout: textOutput } = await execAsync(
+        'codexbar cost',
+        { timeout: 5000 }
+      );
+      // Parse "Today: $9.08 · 37M tokens" format
+      const todayMatch = textOutput.match(/Today:\s*\$([0-9.]+)/);
+      if (todayMatch) {
+        todayCostFromText = parseFloat(todayMatch[1]);
+      }
+    } catch (textError) {
+      console.warn('Failed to fetch today cost from text output:', textError);
+    }
 
     // Aggregate costs
     const summary = {
@@ -136,6 +152,11 @@ export async function GET(request: NextRequest) {
     // Sort raw by date (newest first)
     raw.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
+    // Use text output for today if it's more recent than aggregated data
+    if (todayCostFromText > summary.today) {
+      summary.today = todayCostFromText;
+    }
+    
     // Round to 2 decimal places
     summary.today = Math.round(summary.today * 100) / 100;
     summary.week = Math.round(summary.week * 100) / 100;
