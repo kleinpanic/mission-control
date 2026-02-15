@@ -74,7 +74,7 @@ app.prepare().then(() => {
                 id: "cli",
                 version: "1.2.0",
                 platform: "node",
-                mode: "operator"
+                mode: "cli"
               },
               role: "operator",
               scopes: ["operator.admin"],
