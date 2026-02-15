@@ -79,3 +79,20 @@
 - [x] Add model usage alerts (ModelUsageAlerts component - flags disproportionate spend + paid fallback)
 - [x] Add cost budget thresholds (BudgetAlerts component - configurable daily/weekly/monthly with localStorage)
 - [x] Enhance realtime event filtering (ActivityFeed filter by event type + agent)
+
+## Round 5 (Auto-Decompose + Velocity Tracking) - API Complete ✅
+- [x] Auto-decompose API endpoint (/api/tasks/auto-decompose)
+  - POST: Decompose task or scan eligible tasks
+  - GET: List eligible tasks (moderate/epic, no subtasks)
+- [x] Velocity tracking API endpoint (/api/tasks/velocity)
+  - GET: Agent throughput metrics + 7-day trends
+  - POST: Snapshot, recommend, assign actions
+- [x] Enhanced dispatch API with auto-decompose trigger
+  - Hook integration (task-dispatch-trigger.sh)
+  - Fallback to direct gateway send
+- [ ] UI Integration
+  - [ ] Add "Auto-Decompose" button to Kanban (scan + decompose eligible tasks)
+  - [ ] Add velocity dashboard page (/velocity) with agent metrics
+  - [ ] Add "Smart Assign" button in Kanban (use velocity recommendation)
+  - [ ] Show decomposition status in task details
+  - [ ] Add auto-decompose toggle in TaskModal/dispatch UI

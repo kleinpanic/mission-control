@@ -178,5 +178,54 @@ But the primary issue (WebSocket proxy not connecting) is FIXED and VALIDATED.
 
 ---
 
+**Status:** Validated and complete ✅
+**Next:** Monitor for issues, add UI enhancements as needed
+
+---
+
+## Auto-Decompose & Velocity Tracking (2026-02-15 16:35)
+
+**Status:** ✅ COMPLETE - Committed and pushed
+
+**New Features:**
+1. **Auto-Decompose API** (`/api/tasks/auto-decompose`)
+   - POST: Decompose specific task or scan all eligible tasks
+   - GET: List tasks eligible for auto-decomposition (moderate/epic with no subtasks)
+   - Integrates with `task-auto-decompose.sh` hook
+
+2. **Velocity Tracking API** (`/api/tasks/velocity`)
+   - GET: Retrieve agent throughput metrics and 7-day trends
+   - POST: Snapshot, recommend agent for task, smart assignment
+   - Integrates with `task-velocity.sh` hook
+
+3. **Enhanced Task Dispatch** (`/api/tasks/dispatch`)
+   - Uses `task-dispatch-trigger.sh` hook for autonomous mode activation
+   - Auto-decompose flag: triggers decomposition for moderate/epic tasks
+   - Fallback to direct gateway send if hook fails
+   - Added ghost agent to Slack channel map
+
+**Technical Details:**
+- All endpoints use shell hooks for heavy lifting (separation of concerns)
+- Error handling with fallbacks for hook failures
+- 60s-120s timeouts for long-running operations
+- JSON responses with structured outputs
+
+**Build Status:** ✅ Passing
+- All routes compile successfully
+- Build time: ~8s
+- Route count: 39 total (3 new task routes)
+
+**Commit:** 56b232c - "feat(tasks): add auto-decompose and velocity tracking APIs"
+**Pushed:** main branch (30fd270..56b232c)
+
+**Testing Required:**
+- [ ] Auto-decompose: POST with taskId, scan mode
+- [ ] Velocity: GET with/without agent filter
+- [ ] Velocity: POST snapshot/recommend/assign
+- [ ] Dispatch: Verify hook trigger, fallback logic
+- [ ] UI integration: Add buttons/pages for new features
+
+---
+
 **Status:** Fix committed, awaiting Klein's testing validation
 **Next:** Klein to test WebSocket connection and verify all pages work
