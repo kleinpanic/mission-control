@@ -23,6 +23,7 @@ import { useGateway } from "@/providers/GatewayProvider";
 import { useRealtimeStore } from "@/stores/realtime";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { AgentActivity } from "@/components/dashboard/AgentActivity";
 
 interface AgentInfo {
   id: string;
@@ -580,6 +581,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Agent Activity & Swarm */}
+      <AgentActivity className="bg-zinc-900 border-zinc-800" />
 
       {/* Recent Activity */}
       <Card className="bg-zinc-900 border-zinc-800">
