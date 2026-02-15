@@ -18,11 +18,16 @@ import {
   Activity,
   AlertCircle,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { useGateway } from "@/providers/GatewayProvider";
 import { useRealtimeStore } from "@/stores/realtime";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { AgentActivity } from "@/components/dashboard/AgentActivity";
+import { TaskmasterWidget } from "@/components/dashboard/TaskmasterWidget";
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
+import { getAgentName } from "@/lib/agentNames";
 
 interface AgentInfo {
   id: string;
@@ -30,6 +35,7 @@ interface AgentInfo {
   enabled: boolean;
   status: "active" | "idle" | "waiting" | "error";
   model: string | null;
+  authMode: string; // "oauth" | "api" | "token" | "local" | "unknown"
   heartbeatInterval: string;
   lastActivity: string | null;
   lastActivityAge: string;
@@ -48,6 +54,7 @@ interface StatusData {
   sessions: {
     total: number;
     atCapacity: number;
+    recent?: any[];
   };
   heartbeat: {
     defaultAgentId: string;
@@ -84,8 +91,10 @@ export default function Dashboard() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [costs, setCosts] = useState<CostData | null>(null);
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
+  const [taskStats, setTaskStats] = useState<{ today: number; week: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
+  const [rateLimits, setRateLimits] = useState<any>(null);
 
   const { connected, connecting, request, subscribe } = useGateway();
   const { events } = useRealtimeStore();
@@ -95,68 +104,39 @@ export default function Dashboard() {
     
     setLoading(true);
     try {
-      // Fetch all data in parallel via WebSocket
-      const [agentsResult, statusResult, costsResult, cronResult] = await Promise.all([
-        request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
-        request<any>("status").catch(e => { console.error("status error:", e); return null; }),
-        request<any>("usage.cost").catch(e => { console.error("usage.cost error:", e); return null; }),
-        request<any>("cron.list").catch(e => { console.error("cron.list error:", e); return null; }),
+      // Fetch all data in parallel
+      // Note: Prefer HTTP endpoints to avoid WebSocket pairing issues
+      const [agentsResult, statusResult, costsResult, cronResult, channelsResult, tasksResult, rateLimitsResult] = await Promise.all([
+        // Always prefer HTTP /api/agents (enriched with runtime data: sessions, lastActivity, heartbeat)
+        // WS agents.list only has config data without runtime enrichment
+        fetch("/api/agents").then(r => r.json()).catch(e => { console.error("agents API error:", e); return null; }),
+        fetch("/api/status").then(r => r.json()).catch(e => { console.error("status API error:", e); return null; }),
+        fetch("/api/costs").then(r => r.json()).catch(e => { console.error("costs API error:", e); return null; }),
+        (connected ? request<any>("cron.list").catch(() => null) : Promise.resolve(null))
+          .then(ws => ws || fetch("/api/cron").then(r => r.json()).catch(e => { console.error("cron API error:", e); return null; })),
+        fetch("/api/channels").then(r => r.json()).catch(e => { console.error("channels API error:", e); return null; }),
+        fetch("/api/tasks?status=done,review").then(r => r.json()).catch(e => { console.error("tasks API error:", e); return null; }),
+        fetch("/api/rate-limits").then(r => r.json()).catch(e => { console.error("rate-limits API error:", e); return null; }),
       ]);
       
-      if (agentsResult && statusResult) {
-        // Build a map of agent sessions from status
-        const sessionsByAgent = new Map<string, any[]>();
-        const heartbeatByAgent = new Map<string, any>();
-        
-        // Map sessions by agent
-        statusResult.sessions?.byAgent?.forEach((agentSessions: any) => {
-          sessionsByAgent.set(agentSessions.agentId, agentSessions.recent || []);
-        });
-        
-        // Map heartbeat info by agent
-        statusResult.heartbeat?.agents?.forEach((hb: any) => {
-          heartbeatByAgent.set(hb.agentId, hb);
-        });
-        
-        // Transform agents response to expected format, enriching with session data
-        const agents: AgentInfo[] = (agentsResult.agents || []).map((agent: any) => {
-          const sessions = sessionsByAgent.get(agent.id) || [];
-          const heartbeat = heartbeatByAgent.get(agent.id);
-          
-          // Find most recent activity across all sessions for this agent
-          let mostRecentSession = null;
-          for (const session of sessions) {
-            if (!mostRecentSession || (session.updatedAt || 0) > (mostRecentSession.updatedAt || 0)) {
-              mostRecentSession = session;
-            }
-          }
-          
-          const lastActivityMs = mostRecentSession?.updatedAt;
-          const lastActivity = lastActivityMs ? new Date(lastActivityMs).toISOString() : null;
-          
-          // Determine status based on session activity
-          const activeSessions = sessions.length;
-          const recentActivity = lastActivityMs && (Date.now() - lastActivityMs < 5 * 60 * 1000); // active if < 5min ago
-          const hasWaiting = sessions.some((s: any) => s.percentUsed >= 95);
-          
-          let status: "active" | "idle" | "waiting" | "error" = "idle";
-          if (hasWaiting) status = "waiting";
-          else if (recentActivity) status = "active";
-          
-          const percentages = sessions.map((s: any) => s.percentUsed || 0);
-          const maxPercent = percentages.length > 0 ? Math.max(...percentages, 0) : 0;
-          
+      // Update rate limits state
+      if (rateLimitsResult) setRateLimits(rateLimitsResult);
+      
+      if (agentsResult || statusResult) {
+        // Use agents data directly from /api/agents (already enriched with runtime data)
+        const agents: AgentInfo[] = (agentsResult?.agents || []).map((agent: any) => {
           return {
             id: agent.id,
-            name: agent.name || agent.id,
-            enabled: heartbeat?.enabled ?? true,
-            status,
-            model: mostRecentSession?.model || null,
-            heartbeatInterval: heartbeat?.every || "—",
-            lastActivity,
-            lastActivityAge: formatAge(lastActivity),
-            activeSessions,
-            maxSessionPercent: maxPercent,
+            name: agent.name || getAgentName(agent.id),
+            enabled: agent.enabled !== false,
+            status: agent.status || "idle",
+            model: agent.model || null,
+            authMode: agent.authMode || "unknown",
+            heartbeatInterval: agent.heartbeatInterval || "—",
+            lastActivity: agent.lastActivity || null,
+            lastActivityAge: formatAge(agent.lastActivity),
+            activeSessions: agent.sessions || 0,
+            maxSessionPercent: agent.contextUsage || 0,
           };
         });
 
@@ -173,14 +153,15 @@ export default function Dashboard() {
           },
           agents,
           sessions: {
-            total: statusResult?.sessions?.count || 0,
+            total: statusResult?.sessions?.total || statusResult?.sessions?.count || 0,
             atCapacity: statusResult?.sessions?.recent?.filter((s: any) => s.percentUsed >= 95).length || 0,
+            recent: statusResult?.sessions?.recent || [],
           },
           heartbeat: {
             defaultAgentId: statusResult?.heartbeat?.defaultAgentId || agentsResult?.defaultId || "main",
             nextHeartbeats: statusResult?.heartbeat?.next || [],
           },
-          channels: statusResult?.channelSummary?.channels?.map((c: any) => c.id) || [],
+          channels: channelsResult?.channels?.map((c: any) => c.id) || [],
           health: { status: "ok" },
         });
       }
@@ -200,6 +181,30 @@ export default function Dashboard() {
 
       if (cronResult) {
         setCronJobs(cronResult.jobs || cronResult || []);
+      }
+
+      // Calculate task stats
+      if (tasksResult?.tasks) {
+        const now = Date.now();
+        const oneDayAgo = now - (24 * 60 * 60 * 1000);
+        const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+        
+        // Count tasks that moved to review or completed status (based on statusChangedAt)
+        const completedOrReviewTasks = tasksResult.tasks.filter((t: any) => 
+          (t.status === 'review' || t.status === 'completed') && t.statusChangedAt
+        );
+        const tasksToday = completedOrReviewTasks.filter((t: any) => 
+          new Date(t.statusChangedAt).getTime() > oneDayAgo
+        );
+        const tasksWeek = completedOrReviewTasks.filter((t: any) => 
+          new Date(t.statusChangedAt).getTime() > oneWeekAgo
+        );
+        
+        setTaskStats({
+          today: tasksToday.length,
+          week: tasksWeek.length,
+          total: completedOrReviewTasks.length,
+        });
       }
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
@@ -363,7 +368,7 @@ export default function Dashboard() {
       </div>
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-zinc-300">Agents</CardTitle>
@@ -398,6 +403,19 @@ export default function Dashboard() {
 
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-zinc-300">Tasks Completed Today</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-zinc-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-zinc-100">{taskStats?.today || 0}</div>
+            <p className="text-xs text-zinc-500">
+              Week: {taskStats?.week || 0} • Total: {taskStats?.total || 0}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-zinc-300">Today&apos;s Cost</CardTitle>
             <DollarSign className="h-4 w-4 text-zinc-500" />
           </CardHeader>
@@ -421,10 +439,65 @@ export default function Dashboard() {
             <div className="text-2xl font-bold text-zinc-100">
               {nextHeartbeat?.nextIn || "~15m"}
             </div>
-            <p className="text-xs text-zinc-500">Agent: {nextHeartbeat?.agentId || "main"}</p>
+            <p className="text-xs text-zinc-500">Agent: {getAgentName(nextHeartbeat?.agentId || "main")}</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* System Status Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <TaskmasterWidget />
+      </div>
+
+      {/* Rate Limits */}
+      {rateLimits && rateLimits.summary?.rateLimited > 0 && (
+        <Card className="bg-zinc-900 border-zinc-800 border-l-4 border-l-amber-500">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-zinc-100 flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-400" />
+              Rate Limits Active
+              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                {rateLimits.summary.rateLimited} agent{rateLimits.summary.rateLimited > 1 ? 's' : ''}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {rateLimits.agents
+                .filter((a: any) => a.hasActiveCooldown)
+                .map((agent: any) => (
+                  <div key={agent.agentId} className="bg-zinc-800/50 rounded-lg p-3 border border-amber-500/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold text-zinc-100">{agent.agentName}</span>
+                      <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px]">LIMITED</Badge>
+                    </div>
+                    <div className="space-y-1">
+                      {agent.cooldowns
+                        .filter((c: any) => c.active)
+                        .map((cooldown: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between text-xs gap-2">
+                            <div className="flex items-center gap-1">
+                              <span className="text-zinc-400 font-mono">{cooldown.provider}</span>
+                              {cooldown.authMode && cooldown.authMode !== 'unknown' && (
+                                <span className={cn("text-[9px] px-1 rounded",
+                                  cooldown.authMode === 'oauth' ? 'bg-emerald-500/20 text-emerald-400' :
+                                  cooldown.authMode === 'api' || cooldown.authMode === 'token' ? 'bg-amber-500/20 text-amber-400' :
+                                  'bg-zinc-500/20 text-zinc-400'
+                                )}>
+                                  {cooldown.authMode === 'oauth' ? 'OAuth' : 'API'}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-amber-400">{cooldown.remainingHuman}</span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Agents Grid */}
       <Card className="bg-zinc-900 border-zinc-800">
@@ -444,16 +517,36 @@ export default function Dashboard() {
                     <h3 className="font-semibold text-zinc-100">{agent.name}</h3>
                     <p className="text-xs text-zinc-500">{agent.id}</p>
                   </div>
-                  <Badge className={cn("text-[10px]", getStatusColor(agent.status))}>
-                    {agent.status.toUpperCase()}
-                  </Badge>
+                  <div className="flex items-center gap-1.5">
+                    {rateLimits?.agents?.find((a: any) => a.agentId === agent.id)?.hasActiveCooldown && (
+                      <Badge className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30">
+                        LIMITED
+                      </Badge>
+                    )}
+                    <Badge className={cn("text-[10px]", getStatusColor(agent.status))}>
+                      {agent.status.toUpperCase()}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-zinc-400">Model:</span>
-                    <span className="text-zinc-200 font-mono text-xs truncate max-w-[150px]">
-                      {agent.model || "default"}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Badge className={cn("text-[9px] px-1 py-0",
+                        agent.authMode === "oauth" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
+                        agent.authMode === "api" || agent.authMode === "token" ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
+                        agent.authMode === "local" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
+                        "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
+                      )}>
+                        {agent.authMode === "oauth" ? "OAuth" :
+                         agent.authMode === "api" ? "API" :
+                         agent.authMode === "token" ? "API" :
+                         agent.authMode === "local" ? "Local" : "?"}
+                      </Badge>
+                      <span className="text-zinc-200 font-mono text-xs truncate max-w-[130px]">
+                        {agent.model || "default"}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Last Activity:</span>
@@ -581,41 +674,11 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* Agent Activity & Swarm */}
+      <AgentActivity sessions={status?.sessions.recent || []} />
+
       {/* Recent Activity */}
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardHeader>
-          <CardTitle className="text-lg text-zinc-100">Recent Activity</CardTitle>
-          <CardDescription className="text-zinc-400">Latest events from the gateway (live)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {events.length === 0 ? (
-              <p className="text-sm text-zinc-500 text-center py-8">
-                {connected 
-                  ? "No recent events. Activity will appear here when agents are active."
-                  : "Connect to gateway to see live events."}
-              </p>
-            ) : (
-              events.slice(0, 10).map((event, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-start gap-3 py-2 border-b border-zinc-800 last:border-0"
-                >
-                  <span className="text-xs text-zinc-500 whitespace-nowrap">
-                    {new Date(event.timestamp).toLocaleTimeString()}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-zinc-200">{event.type}</p>
-                    {event.agentId && (
-                      <p className="text-xs text-zinc-500">Agent: {event.agentId}</p>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <ActivityFeed events={events} />
 
       {/* Quick Config */}
       <Card className="bg-zinc-900 border-zinc-800">

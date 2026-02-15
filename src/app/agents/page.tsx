@@ -6,15 +6,27 @@ import { AgentCard } from "@/components/agents/AgentCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Agent } from "@/types";
 
-// Default agents based on Klein's setup
-const DEFAULT_AGENTS = [
-  { id: "main", name: "KleinClaw" },
-  { id: "dev", name: "KleinClaw-Code" },
-  { id: "ops", name: "Ops" },
-  { id: "school", name: "School" },
-  { id: "research", name: "Research" },
-  { id: "meta", name: "Meta" },
-];
+// Well-known context windows by model (fallback when gateway doesn't report it)
+const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+  "claude-sonnet-4-5": 200000,
+  "claude-opus-4-5": 200000,
+  "claude-opus-4-6": 200000,
+  "gpt-5.2": 400000,
+  "gemini-3-flash-preview": 1000000,
+  "gemini-3-pro-preview": 2000000,
+  "gemma2:2b": 8192,
+  "phi3:mini": 4096,
+  "qwen2.5:3b": 32768,
+};
+
+function lookupContextWindow(model: string | null): number {
+  if (!model) return 200000;
+  // Try exact match first, then suffix match
+  if (MODEL_CONTEXT_WINDOWS[model]) return MODEL_CONTEXT_WINDOWS[model];
+  const suffix = model.split("/").pop() || "";
+  if (MODEL_CONTEXT_WINDOWS[suffix]) return MODEL_CONTEXT_WINDOWS[suffix];
+  return 200000; // Default fallback
+}
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -22,36 +34,78 @@ export default function AgentsPage() {
   const { connected, request, subscribe } = useGateway();
 
   const fetchAgents = useCallback(async () => {
-    if (!connected) return;
-    
     setLoading(true);
     try {
-      const [agentsResult, statusResult] = await Promise.all([
-        request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
-        request<any>("status").catch(e => { console.error("status error:", e); return null; }),
-      ]);
+      // Try WebSocket first, fall back to HTTP API
+      let agentsResult = null;
+      let statusResult = null;
+      
+      if (connected) {
+        [agentsResult, statusResult] = await Promise.all([
+          request<any>("agents.list").catch(e => { console.error("agents.list WS error:", e); return null; }),
+          request<any>("status").catch(e => { console.error("status WS error:", e); return null; }),
+        ]);
+      }
+      
+      // Fallback to HTTP APIs if WebSocket failed
+      if (!agentsResult) {
+        try {
+          const res = await fetch("/api/agents");
+          agentsResult = await res.json();
+        } catch (e) {
+          console.error("agents HTTP API error:", e);
+        }
+      }
+      
+      if (!statusResult) {
+        try {
+          const res = await fetch("/api/status");
+          statusResult = await res.json();
+        } catch (e) {
+          console.error("status HTTP API error:", e);
+        }
+      }
       
       if (agentsResult || statusResult) {
-        // Build a map of agent sessions from status
+        // Build maps from status data
         const sessionsByAgent = new Map<string, any[]>();
         const heartbeatByAgent = new Map<string, any>();
         
         if (statusResult) {
           // Map sessions by agent
-          statusResult.sessions?.byAgent?.forEach((agentSessions: any) => {
-            sessionsByAgent.set(agentSessions.agentId, agentSessions.recent || []);
-          });
+          const allSessions = statusResult.sessions?.recent || [];
+          for (const s of allSessions) {
+            const agentId = s.agentId || "";
+            if (!sessionsByAgent.has(agentId)) sessionsByAgent.set(agentId, []);
+            sessionsByAgent.get(agentId)!.push(s);
+          }
           
           // Map heartbeat info by agent
           statusResult.heartbeat?.agents?.forEach((hb: any) => {
             heartbeatByAgent.set(hb.agentId, hb);
           });
         }
+
+        // Build next heartbeat map from status.heartbeat.next
+        const nextHeartbeatByAgent = new Map<string, any>();
+        if (statusResult?.heartbeat?.next) {
+          for (const hb of statusResult.heartbeat.next) {
+            nextHeartbeatByAgent.set(hb.agentId, hb);
+          }
+        }
         
-        // Transform agents response to expected format
-        const fetchedAgents: Agent[] = (agentsResult?.agents || DEFAULT_AGENTS).map((agent: any) => {
+        // Use ONLY what the gateway returns — no hardcoded defaults
+        const gatewayAgents = agentsResult?.agents || [];
+        
+        if (gatewayAgents.length === 0) {
+          setAgents([]);
+          return;
+        }
+        
+        const fetchedAgents: Agent[] = gatewayAgents.map((agent: any) => {
           const sessions = sessionsByAgent.get(agent.id) || [];
-          const heartbeat = heartbeatByAgent.get(agent.id);
+          const heartbeatInfo = heartbeatByAgent.get(agent.id);
+          const nextHb = nextHeartbeatByAgent.get(agent.id);
           
           // Find most recent activity
           let mostRecentSession = null;
@@ -64,11 +118,9 @@ export default function AgentsPage() {
           const lastActivityMs = mostRecentSession?.updatedAt;
           const lastActivity = lastActivityMs ? new Date(lastActivityMs).toISOString() : null;
           
-          // Determine status based on session state and token/rate limits
+          // Determine status
           const activeSessions = sessions.length;
           const recentActivity = lastActivityMs && (Date.now() - lastActivityMs < 5 * 60 * 1000);
-          
-          // Check for waiting states from session data
           const hasTokenLimited = sessions.some((s: any) => s.state === "waiting" && s.reason?.includes("token"));
           const hasRateLimited = sessions.some((s: any) => s.state === "waiting" && s.reason?.includes("rate"));
           const hasWaiting = sessions.some((s: any) => s.percentUsed >= 95 || s.state === "waiting");
@@ -80,22 +132,37 @@ export default function AgentsPage() {
             status = "active";
           }
           
-          // Get next heartbeat
-          const nextHeartbeat = statusResult?.heartbeat?.next?.find((hb: any) => hb.agentId === agent.id);
+          // Compute context usage properly
+          // Use contextTokens from session if available, otherwise look up by model
+          const contextUsages = sessions.map((s: any) => {
+            const total = s.totalTokens || 0;
+            const ctxLimit = s.contextTokens || lookupContextWindow(s.model);
+            return ctxLimit > 0 ? (total / ctxLimit) * 100 : 0;
+          });
+          const maxContextUsage = contextUsages.length > 0 ? Math.max(...contextUsages, 0) : 0;
+
+          // Heartbeat: prefer next heartbeat time, fall back to interval
+          let heartbeatNext: string | null = null;
+          if (nextHb?.nextIn) {
+            heartbeatNext = nextHb.nextIn;
+          } else if (heartbeatInfo?.every) {
+            heartbeatNext = heartbeatInfo.every;
+          }
           
           return {
             id: agent.id,
             name: agent.name || agent.id,
             status,
             model: mostRecentSession?.model || agent.model || null,
+            authMode: agent.authMode || "unknown",
             lastActivity,
             activeSession: mostRecentSession?.key || null,
-            heartbeatNext: nextHeartbeat?.nextIn || null,
+            heartbeatNext,
             heartbeatOverdue: false,
             activeSessions,
             tokenLimited: hasTokenLimited,
             rateLimited: hasRateLimited,
-            contextUsagePercent: Math.max(...sessions.map((s: any) => s.percentUsed || 0), 0),
+            contextUsagePercent: maxContextUsage,
           };
         });
 
@@ -109,9 +176,8 @@ export default function AgentsPage() {
   }, [connected, request]);
 
   useEffect(() => {
-    if (connected) {
-      fetchAgents();
-    }
+    // Fetch on mount and when connection state changes
+    fetchAgents();
   }, [connected, fetchAgents]);
 
   // Subscribe to real-time updates
@@ -136,48 +202,35 @@ export default function AgentsPage() {
     };
   }, [connected, subscribe, fetchAgents]);
 
-  // Merge with default agents to ensure all 6 are shown
-  const displayAgents = DEFAULT_AGENTS.map((defaultAgent) => {
-    const liveAgent = agents.find((a) => a.id === defaultAgent.id);
-    return liveAgent || {
-      id: defaultAgent.id,
-      name: defaultAgent.name,
-      status: "idle" as const,
-      model: null,
-      lastActivity: null,
-      activeSession: null,
-      heartbeatNext: null,
-      heartbeatOverdue: false,
-      activeSessions: 0,
-      tokenLimited: false,
-      rateLimited: false,
-      contextUsagePercent: 0,
-    };
-  });
-
-  const activeCount = displayAgents.filter((a) => a.status === "active").length;
-  const waitingCount = displayAgents.filter((a) => a.status === "waiting").length;
+  const activeCount = agents.filter((a) => a.status === "active").length;
+  const waitingCount = agents.filter((a) => a.status === "waiting").length;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-zinc-100">Agents</h1>
         <span className="text-sm text-zinc-500">
+          {agents.length === 0 && !loading && "No agents found"}
           {activeCount > 0 && `${activeCount} active`}
           {waitingCount > 0 && ` • ${waitingCount} waiting`}
-          {activeCount === 0 && waitingCount === 0 && "All idle"}
+          {activeCount === 0 && waitingCount === 0 && agents.length > 0 && `${agents.length} idle`}
         </span>
       </div>
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
+          {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-48 bg-zinc-800" />
           ))}
         </div>
+      ) : agents.length === 0 ? (
+        <div className="text-center py-12 text-zinc-500">
+          <p className="text-lg">No agents configured</p>
+          <p className="text-sm mt-2">Connect to a gateway with configured agents to see them here.</p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {displayAgents.map((agent) => (
+          {agents.map((agent) => (
             <AgentCard key={agent.id} agent={agent} />
           ))}
         </div>

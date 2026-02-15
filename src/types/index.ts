@@ -9,6 +9,7 @@ export interface Agent {
   name: string;
   status: AgentStatus;
   model: string | null;
+  authMode?: string; // "oauth" | "api" | "token" | "local" | "unknown"
   lastActivity: string | null;
   activeSession: string | null;
   heartbeatNext: string | null;

@@ -1,136 +1,140 @@
-# Mission Control - Autonomous Work Progress
+# Mission Control - WebSocket Proxy Fix
 
-## Status: IN_PROGRESS
+## Status: CRITICAL FIX COMMITTED - PENDING TESTING
 
-## Session: auto-1771059781 (Round 3)
-Started: 2026-02-14T04:03:01-05:00  
-Previous: auto-1770952335 (completed systematic debugging)  
-Current: Phase 2 - Implementing Fixes
+## Session: manual-fix-2026-02-14-22:43
+Started: 2026-02-14T22:43:00-05:00
+Issue: WebSocket proxy broken (gateway authentication failure)
+Fix: Commit 8d18085
 
-## Previous Session Summary (auto-1770952335)
-- Fixed critical WebSocket UUID issue
-- Fixed cost breakdowns (use historyData)
-- Fixed settings default model display
-- Identified root causes for remaining issues
-- 8 commits pushed to `fix/round3-critical-fixes`
+## Problem Identified by Klein
 
-## Critical Fix - COMPLETE ✅
+**Root Cause:**
+`server.ts` proxy connects to gateway but never sends required initial `connect` handshake.
+Gateway expects this immediately after WS opens.
 
-**Root Cause:** `crypto.randomUUID()` fails in non-secure HTTP contexts (only works on HTTPS or localhost).  
-**Impact:** ALL WebSocket requests failed → empty dashboards, agents, costs, sessions.  
-**Solution:** Added fallback to timestamp+random for HTTP contexts.  
-**Result:** Klein confirmed "a lot better" - data now loading from localhost! ✅
+**Broken Flow:**
+1. Browser → Mission Control server (works)
+2. Server → Gateway (connects but sends nothing)
+3. Gateway times out/rejects (code 1006)
 
-**Commits:**
-- `fa09c8a` - crypto.randomUUID fallback for non-secure contexts  
-- `e1d6ca3` - Use WebSocket proxy for remote LAN access
-- `93a4160` - WebSocket proxy text frame fix
-- `cbb57cd` - Forward Origin header through proxy for auth
-- `29a72f9` - docs update
-- `d5f5b8d` - Fix cost breakdowns (use historyData)
-- `419ab5f` - docs: cron investigation findings
-- `3865102` - Settings default model display + channels debug
+**Evidence:**
+- Browser console: "WebSocket opened, waiting for challenge..." → immediate 1006 close
+- `src/providers/GatewayProvider.tsx` shows client waits for `connect.challenge` before handshake
+- Gateway message handler requires `connect` as first message
 
-## Issues - Systematic Breakdown
+## Fix Applied
 
-### ✅ FIXED (Committed)
-1. **Cost breakdowns** - "By Provider" and "By Model" now populate from historyData instead of empty summary fields
-2. **Settings default model** - Dropdown now shows actual default from config (was hardcoded "gpt-5.2")
+**Location:** `server.ts` line 63-88 (`gatewayWs.on("open")` handler)
 
-### 🔍 ROOT CAUSE IDENTIFIED (Needs Klein's Input)
+**Changes:**
+1. **Send connect handshake immediately on gateway connection:**
+   ```typescript
+   gatewayWs.on("open", () => {
+     console.log("[WS Proxy] Connected to gateway, sending handshake...");
+     
+     const connectMsg = {
+       type: "req",
+       id: "gateway-connect",
+       method: "connect",
+       params: {
+         minProtocol: 3,
+         maxProtocol: 3,
+         client: { id: "mission-control-proxy", ... },
+         role: "operator",
+         scopes: ["operator.admin"],
+         auth: { token: GATEWAY_TOKEN }
+       }
+     };
+     
+     gatewayWs!.send(JSON.stringify(connectMsg));
+   });
+   ```
 
-**Cron counts (10/10/0 vs 22/10/12):**
-- ✅ API works correctly: returns 22 jobs (10 enabled, 12 disabled)
-- ✅ Backend calls `openclaw cron list --all`
-- ❓ Frontend logic correct
-- **Hypothesis:** Browser cache (30s API cache + 60s refresh)
-- **Action:** Klein please hard refresh (Ctrl+Shift+R) and report
+2. **Handle connect response to mark gateway as authenticated:**
+   ```typescript
+   if (msg.type === "res" && msg.id === "gateway-connect") {
+     if (msg.ok) {
+       console.log("[WS Proxy] Gateway authenticated successfully");
+       gatewayConnected = true;
+       // Flush pending messages
+     } else {
+       console.error("[WS Proxy] Gateway auth failed:", msg.error);
+       clientWs.close(4002, "Gateway authentication failed");
+     }
+     return; // Don't forward server connect response to client
+   }
+   ```
 
-**Session compaction (11 eligible → 0 compacted):**
-- ✅ UI correctly identifies 11 eligible sessions
-- ✅ Code calls `sessions.compact` WebSocket method for each
-- ❌ **OpenClaw CLI has NO `compact` command** (verified)
-- ❌ Errors silently swallowed in try/catch
-- **Hypothesis:** `sessions.compact` WebSocket method doesn't exist
-- **Action:** Klein please verify if gateway actually has this method
+3. **Handle connect.challenge event (newer protocol fallback):**
+   ```typescript
+   if (msg.type === "event" && msg.event === "connect.challenge") {
+     console.log("[WS Proxy] Received connect.challenge (connect request already sent)");
+     return; // Already sent connect in on("open")
+   }
+   ```
 
-### 📋 TODO (Lower Priority)
-1. **Cost by Agent** - Empty (known limitation - requires session log parsing implementation)
-2. **Connected channels** - Shows nothing (added debug logging, need to check browser console)
-3. **Analytics "4 errors"** - Not investigated yet
-4. **Agent status bugs** - Dev/Meta show "disabled" + "waiting" (contradictory)
-5. **Session cleanup** - 55 total sessions need cleanup policy
-6. **Kanban UI** - Visual polish requested
+## Testing Required
 
-## Technical Findings
+**Phase 1: Server Restart & Connection Test**
+- [ ] Kill old dev server instances
+- [ ] Start fresh: `npm run dev`
+- [ ] Verify server logs show: "[WS Proxy] Connected to gateway, sending handshake..."
+- [ ] Verify logs show: "[WS Proxy] Gateway authenticated successfully"
 
-### Cost Data Flow
-```
-Frontend needs:
-  - byProvider (for breakdown card)
-  - byModel (for breakdown card)
-  - byAgent (for chart)
+**Phase 2: Browser Validation**
+- [ ] Open http://localhost:3333/
+- [ ] Open browser DevTools console
+- [ ] Verify WebSocket connection establishes (no code 1006 close)
+- [ ] Verify NO error: "WebSocket opened, waiting for challenge... [close 1006]"
+- [ ] Verify connection shows "connected" state in UI
 
-Data sources:
-  - /api/costs → calls codexbar --pretty → returns EMPTY data
-  - /api/costs/history → calls codexbar --format json → returns REAL data
-  
-Fix: Use historyData.byProvider/byModel instead of summary
-```
+**Phase 3: Dashboard Page Re-validation**
+- [ ] Agents count shows real number (not 0)
+- [ ] Recent Activity feed displays events
+- [ ] Cost shows real values (not $0.00)
+- [ ] Real-time updates work (heartbeat controls, etc.)
 
-### Cron Data Flow
-```
-CLI: openclaw cron list --all
-→ 22 jobs total (10 enabled, 12 disabled) ✅
+**Phase 4: All Pages Re-test**
+- [ ] Dashboard (/)
+- [ ] Agents (/agents) - should show agent list
+- [ ] Kanban (/kanban) - already works (uses SQLite)
+- [ ] Sessions (/sessions) - should show "Connected" not "Offline"
+- [ ] Costs (/costs) - should show cost charts
+- [ ] Cron (/cron) - untested previously
+- [ ] Settings (/settings) - should show models/channels
+- [ ] Approvals (/approvals) - untested previously
+- [ ] Evolver (/evolver) - untested previously
 
-API: /api/cron (calls same CLI with --all flag)
-→ Returns all 22 jobs correctly ✅
+## Expected Results
 
-Frontend: Shows 10/10/0
-→ Either cache or state issue
-```
+✅ **Working:**
+- WebSocket connects and stays connected
+- Gateway proxy authenticates successfully
+- All pages display live data from gateway
+- No connection errors in console
+- Real-time updates work across all pages
 
-### Session Compaction
-```
-Frontend: CompactionPolicies.tsx
-→ Calls request("sessions.compact", { sessionKey })
+## Completion Criteria
 
-OpenClaw CLI: openclaw sessions --help
-→ NO compact subcommand ❌
+- [ ] All Phase 1-4 tests pass
+- [ ] No WebSocket connection errors
+- [ ] All pages load with live data
+- [ ] Create updated BROWSER-VALIDATION-REPORT.md with test results
+- [ ] Mark this fix as COMPLETE
 
-OpenClaw CLI: openclaw --help | grep compact
-→ NO compact command anywhere ❌
+## Commits
 
-Conclusion: Method likely doesn't exist in gateway
-```
+- `8d18085` - fix(websocket): add missing connect handshake to gateway proxy
 
-## Files Modified (7 commits)
-- `src/providers/GatewayProvider.tsx` - crypto.randomUUID fix + proxy routing
-- `server.ts` - WebSocket proxy text frame fix + Origin forwarding
-- `src/app/costs/page.tsx` - Use historyData for cost breakdowns
-- `src/app/settings/page.tsx` - Dynamic default model label + channels debug
-- `.env.local` - Removed hardcoded WireGuard URL
-- `PROGRESS.md` - Comprehensive documentation
+## Notes
 
-## Branch
-`fix/round3-critical-fixes` (7 commits ready to merge)
+- Previous autonomous work incorrectly marked Phase 1 as complete
+- Kanban still worked because it uses SQLite directly, not WebSocket
+- This fix is CRITICAL for all live data features (dashboard, agents, costs, etc.)
+- After testing confirms the fix, can proceed with Phases 5-8 of Mission Control work
 
-## Next Steps
-1. **Wait for Klein's verification:**
-   - Hard refresh cron page → does it show 22/10/12?
-   - Check browser console on sessions page → what error for compaction?
-   - Check settings page console → what's in channels debug log?
+---
 
-2. **Once verified:**
-   - Fix session compaction (either implement API endpoint or remove feature)
-   - Fix channels display (config structure mismatch)
-   - Investigate analytics errors
-   - Clean up 55 sessions
-   - Polish kanban UI
-
-## Evidence
-- Klein: "Wow.... you rlly did it gang... a lot better.." ✅
-- Critical WebSocket blocker resolved ✅  
-- Cost data now displaying (awaiting verification)
-- Settings default model now dynamic (awaiting verification)
-- Core issues systematically root-caused 🎯
+**Status:** Fix committed, awaiting Klein's testing validation
+**Next:** Klein to test WebSocket connection and verify all pages work

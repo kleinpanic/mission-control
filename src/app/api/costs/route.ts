@@ -66,6 +66,22 @@ export async function GET(request: NextRequest) {
     }
 
     const providers: CodexbarProviderData[] = JSON.parse(stdout);
+    
+    // Also fetch today's cost from text output (aggregated JSON doesn't include today yet)
+    let todayCostFromText = 0;
+    try {
+      const { stdout: textOutput } = await execAsync(
+        'codexbar cost',
+        { timeout: 5000 }
+      );
+      // Parse "Today: $9.08 · 37M tokens" format
+      const todayMatch = textOutput.match(/Today:\s*\$([0-9.]+)/);
+      if (todayMatch) {
+        todayCostFromText = parseFloat(todayMatch[1]);
+      }
+    } catch (textError) {
+      console.warn('Failed to fetch today cost from text output:', textError);
+    }
 
     // Aggregate costs
     const summary = {
@@ -77,7 +93,10 @@ export async function GET(request: NextRequest) {
     };
 
     const now_date = new Date();
-    const todayStr = now_date.toISOString().slice(0, 10); // "2026-02-12"
+    // Use local date for "today" comparison (not UTC) to match user's timezone
+    const localOffset = now_date.getTimezoneOffset() * 60 * 1000;
+    const localDate = new Date(now_date.getTime() - localOffset);
+    const todayStr = localDate.toISOString().slice(0, 10); // "2026-02-14" in local time
     const weekAgo = new Date(now_date.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const monthStart = `${now_date.getFullYear()}-${String(now_date.getMonth() + 1).padStart(2, '0')}-01`;
 
@@ -133,6 +152,11 @@ export async function GET(request: NextRequest) {
     // Sort raw by date (newest first)
     raw.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
+    // Use text output for today if it's more recent than aggregated data
+    if (todayCostFromText > summary.today) {
+      summary.today = todayCostFromText;
+    }
+    
     // Round to 2 decimal places
     summary.today = Math.round(summary.today * 100) / 100;
     summary.week = Math.round(summary.week * 100) / 100;

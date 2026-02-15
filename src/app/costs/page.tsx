@@ -92,13 +92,34 @@ export default function CostsPage() {
           const daily = finalCostResult.daily || [];
           const totals = finalCostResult.totals || {};
           
-          const nowStr = new Date().toISOString().slice(0, 10);
+          const now = new Date();
+          // Use local date for "today" comparison (not UTC) to match user's timezone
+          const localOffset = now.getTimezoneOffset() * 60 * 1000;
+          const localDate = new Date(now.getTime() - localOffset);
+          const nowStr = localDate.toISOString().slice(0, 10);
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+          
           const todayEntry = daily.find((d: any) => d.date === nowStr);
+          
+          // Calculate week and month from daily entries if not provided
+          let weekCost = 0;
+          let monthCost = 0;
+          for (const day of daily) {
+            const dayDate = day.date;
+            const dayCost = day.totalCost ?? 0;
+            if (dayDate >= weekAgo) {
+              weekCost += dayCost;
+            }
+            if (dayDate >= monthStart) {
+              monthCost += dayCost;
+            }
+          }
           
           summary = {
             today: todayEntry?.totalCost ?? finalCostResult.today ?? 0,
-            week: finalCostResult.week ?? totals.totalCost ?? 0, // Fallback to totals if week aggregation missing
-            month: finalCostResult.month ?? totals.totalCost ?? 0,
+            week: finalCostResult.week ?? weekCost,
+            month: finalCostResult.month ?? monthCost,
             byProvider: finalCostResult.byProvider ?? {},
             byModel: finalCostResult.byModel ?? {},
           };

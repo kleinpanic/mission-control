@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createTask, getTasks, updateTask, deleteTask } from '@/lib/db';
 import { TaskStatus, TaskPriority, TaskType } from '@/types';
+import { logTaskActivity } from '@/lib/taskActivity';
+import { CreateTaskSchema, UpdateTaskSchema, validateRequest } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,6 +16,10 @@ export async function GET(request: NextRequest) {
     const tag = searchParams.get('tag');
     const backburnered = searchParams.get('backburnered');
     const sort = searchParams.get('sort');
+    
+    // Pagination parameters
+    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : undefined;
+    const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!, 10) : 0;
 
     const filters: any = {};
 
@@ -30,8 +36,27 @@ export async function GET(request: NextRequest) {
     if (backburnered !== null) filters.backburnered = backburnered === 'true';
     if (sort) filters.sort = sort;
 
-    const tasks = getTasks(filters);
-    return NextResponse.json({ tasks });
+    // Get all matching tasks
+    const allTasks = getTasks(filters);
+    const total = allTasks.length;
+    
+    // Apply pagination if requested
+    const tasks = limit !== undefined
+      ? allTasks.slice(offset, offset + limit)
+      : allTasks;
+    
+    // Return with pagination metadata
+    const response: any = { tasks };
+    if (limit !== undefined) {
+      response.pagination = {
+        total,
+        offset,
+        limit,
+        hasMore: offset + limit < total,
+      };
+    }
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Tasks GET error:', error);
     return NextResponse.json(
@@ -44,33 +69,37 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, description, status, priority, type, assignedTo, tags, metadata,
-            complexity, danger, list, dueDate, estimatedMinutes, parentId, projectId } = body;
-
-    if (!title) {
+    
+    // Validate request body
+    const validation = validateRequest(CreateTaskSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'Missing required field: title' },
+        { error: validation.error.message, issues: validation.error.issues },
         { status: 400 }
       );
     }
 
+    const data = validation.data;
     const task = createTask({
-      title,
-      description,
-      status: (status || 'intake') as TaskStatus,
-      priority: (priority || 'medium') as TaskPriority,
-      type: (type || 'manual') as TaskType,
-      complexity: complexity || 'simple',
-      danger: danger || 'safe',
-      assignedTo: assignedTo || null,
-      list: list || 'agents',
-      tags: tags || [],
-      metadata,
-      dueDate: dueDate || null,
-      estimatedMinutes: estimatedMinutes || null,
-      parentId: parentId || null,
-      projectId: projectId || null,
+      title: data.title,
+      description: data.description || '',
+      status: data.status as TaskStatus,
+      priority: data.priority as TaskPriority,
+      type: data.type as TaskType,
+      complexity: data.complexity,
+      danger: data.danger,
+      assignedTo: data.assignedTo || null,
+      list: data.list,
+      tags: data.tags,
+      metadata: data.metadata,
+      dueDate: data.dueDate || null,
+      estimatedMinutes: data.estimatedMinutes || null,
+      parentId: data.parentId || null,
+      projectId: data.projectId || null,
     });
+
+    // Log creation activity
+    logTaskActivity(task.id, 'created', 'ui', null, task.title);
 
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {
@@ -85,12 +114,26 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, ...updates } = body;
-
-    if (!id) {
+    
+    // Validate request body
+    const validation = validateRequest(UpdateTaskSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'Missing task id' },
+        { error: validation.error.message, issues: validation.error.issues },
         { status: 400 }
+      );
+    }
+
+    const { id, ...updates } = validation.data;
+
+    // Get old task for activity logging
+    const oldTasks = getTasks({ status: undefined as any });
+    const oldTask = oldTasks.find(t => t.id === id);
+    
+    if (!oldTask) {
+      return NextResponse.json(
+        { error: 'Task not found' },
+        { status: 404 }
       );
     }
 
@@ -101,6 +144,20 @@ export async function PATCH(request: NextRequest) {
         { error: 'Task not found' },
         { status: 404 }
       );
+    }
+
+    // Log significant changes to activity table (sync with oc-tasks)
+    if (updates.status && updates.status !== oldTask.status) {
+      logTaskActivity(id, 'moved', 'ui', oldTask.status, updates.status);
+    }
+    if (updates.assignedTo !== undefined && updates.assignedTo !== oldTask.assignedTo) {
+      logTaskActivity(id, 'assigned', 'ui', oldTask.assignedTo, updates.assignedTo);
+    }
+    if (updates.priority && updates.priority !== oldTask.priority) {
+      logTaskActivity(id, 'updated', 'ui', oldTask.priority, updates.priority);
+    }
+    if (updates.title && updates.title !== oldTask.title) {
+      logTaskActivity(id, 'updated', 'ui', oldTask.title, updates.title);
     }
 
     return NextResponse.json({ task });
@@ -117,6 +174,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const permanent = searchParams.get('permanent') === 'true';
 
     if (!id) {
       return NextResponse.json(
@@ -125,6 +183,28 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    // Soft delete by default: move to archived status
+    if (!permanent) {
+      const task = updateTask(id, { status: 'archived' });
+      
+      if (!task) {
+        return NextResponse.json(
+          { error: 'Task not found' },
+          { status: 404 }
+        );
+      }
+
+      // Log archive activity
+      logTaskActivity(id, 'archived', 'ui', task.status, 'archived');
+
+      return NextResponse.json({ 
+        success: true, 
+        archived: true,
+        task 
+      });
+    }
+
+    // Permanent delete: remove from database
     const success = deleteTask(id);
 
     if (!success) {
@@ -134,7 +214,14 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ success: true });
+    // Log permanent deletion
+    logTaskActivity(id, 'deleted', 'ui', null, 'permanent');
+
+    return NextResponse.json({ 
+      success: true, 
+      archived: false,
+      permanent: true 
+    });
   } catch (error) {
     console.error('Tasks DELETE error:', error);
     return NextResponse.json(

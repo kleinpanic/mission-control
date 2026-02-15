@@ -2,9 +2,26 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useAgentsStore } from './agents';
 import { Agent } from '@/types';
 
+function makeAgent(overrides: Partial<Agent> = {}): Agent {
+  return {
+    id: 'main',
+    name: 'Main',
+    status: 'active',
+    model: null,
+    lastActivity: null,
+    activeSession: null,
+    heartbeatNext: null,
+    heartbeatOverdue: false,
+    activeSessions: 0,
+    tokenLimited: false,
+    rateLimited: false,
+    contextUsagePercent: 0,
+    ...overrides,
+  };
+}
+
 describe('Agents Store', () => {
   beforeEach(() => {
-    // Reset store before each test
     useAgentsStore.setState({ agents: [], loading: false });
   });
 
@@ -16,22 +33,8 @@ describe('Agents Store', () => {
 
   it('should set agents', () => {
     const mockAgents: Agent[] = [
-      {
-        id: 'main',
-        name: 'Main',
-        status: 'active',
-        lastHeartbeat: new Date().toISOString(),
-        sessions: [],
-        context: { used: 50000, limit: 200000 },
-      },
-      {
-        id: 'dev',
-        name: 'Dev',
-        status: 'idle',
-        lastHeartbeat: new Date().toISOString(),
-        sessions: [],
-        context: { used: 30000, limit: 200000 },
-      },
+      makeAgent({ id: 'main', name: 'Main', status: 'active', contextUsagePercent: 25 }),
+      makeAgent({ id: 'dev', name: 'Dev', status: 'idle', contextUsagePercent: 15 }),
     ];
 
     useAgentsStore.getState().setAgents(mockAgents);
@@ -50,49 +53,22 @@ describe('Agents Store', () => {
 
   it('should update a single agent', () => {
     const initialAgents: Agent[] = [
-      {
-        id: 'main',
-        name: 'Main',
-        status: 'active',
-        lastHeartbeat: '2026-01-01T00:00:00Z',
-        sessions: [],
-        context: { used: 50000, limit: 200000 },
-      },
-      {
-        id: 'dev',
-        name: 'Dev',
-        status: 'idle',
-        lastHeartbeat: '2026-01-01T00:00:00Z',
-        sessions: [],
-        context: { used: 30000, limit: 200000 },
-      },
+      makeAgent({ id: 'main', status: 'active', contextUsagePercent: 25 }),
+      makeAgent({ id: 'dev', name: 'Dev', status: 'idle', contextUsagePercent: 15 }),
     ];
 
     useAgentsStore.setState({ agents: initialAgents });
-
-    const updates = {
-      status: 'active' as const,
-      context: { used: 60000, limit: 200000 },
-    };
-
-    useAgentsStore.getState().updateAgent('dev', updates);
+    useAgentsStore.getState().updateAgent('dev', { status: 'active', contextUsagePercent: 30 });
+    
     const { agents } = useAgentsStore.getState();
-
     expect(agents[1].status).toBe('active');
-    expect(agents[1].context.used).toBe(60000);
+    expect(agents[1].contextUsagePercent).toBe(30);
     expect(agents[0].status).toBe('active'); // main unchanged
   });
 
   it('should not update non-existent agent', () => {
     const initialAgents: Agent[] = [
-      {
-        id: 'main',
-        name: 'Main',
-        status: 'active',
-        lastHeartbeat: new Date().toISOString(),
-        sessions: [],
-        context: { used: 50000, limit: 200000 },
-      },
+      makeAgent({ id: 'main', status: 'active' }),
     ];
 
     useAgentsStore.setState({ agents: initialAgents });
@@ -104,22 +80,23 @@ describe('Agents Store', () => {
   });
 
   it('should preserve other agent fields when updating', () => {
-    const agent: Agent = {
+    const agent = makeAgent({
       id: 'dev',
       name: 'Dev Agent',
       status: 'active',
-      lastHeartbeat: '2026-01-01T00:00:00Z',
-      sessions: [{ key: 'session1', kind: 'direct' }],
-      context: { used: 10000, limit: 200000 },
-    };
+      model: 'anthropic/claude-sonnet-4-5',
+      activeSessions: 3,
+      contextUsagePercent: 50,
+    });
 
     useAgentsStore.setState({ agents: [agent] });
     useAgentsStore.getState().updateAgent('dev', { status: 'idle' });
 
     const { agents } = useAgentsStore.getState();
     expect(agents[0].name).toBe('Dev Agent');
-    expect(agents[0].sessions).toHaveLength(1);
-    expect(agents[0].context.used).toBe(10000);
+    expect(agents[0].model).toBe('anthropic/claude-sonnet-4-5');
+    expect(agents[0].activeSessions).toBe(3);
+    expect(agents[0].contextUsagePercent).toBe(50);
     expect(agents[0].status).toBe('idle');
   });
 });
