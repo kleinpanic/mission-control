@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { AgentActivity } from "@/components/dashboard/AgentActivity";
 import { TaskmasterWidget } from "@/components/dashboard/TaskmasterWidget";
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { getAgentName } from "@/lib/agentNames";
 
 interface AgentInfo {
@@ -600,40 +601,7 @@ export default function Dashboard() {
       <AgentActivity sessions={status?.sessions.recent || []} />
 
       {/* Recent Activity */}
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardHeader>
-          <CardTitle className="text-lg text-zinc-100">Recent Activity</CardTitle>
-          <CardDescription className="text-zinc-400">Latest events from the gateway (live)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {events.length === 0 ? (
-              <p className="text-sm text-zinc-500 text-center py-8">
-                {connected 
-                  ? "No recent events. Activity will appear here when agents are active."
-                  : "Connect to gateway to see live events."}
-              </p>
-            ) : (
-              events.slice(0, 10).map((event, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-start gap-3 py-2 border-b border-zinc-800 last:border-0"
-                >
-                  <span className="text-xs text-zinc-500 whitespace-nowrap">
-                    {new Date(event.timestamp).toLocaleTimeString()}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-zinc-200">{event.type}</p>
-                    {event.agentId && (
-                      <p className="text-xs text-zinc-500">Agent: {event.agentId}</p>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <ActivityFeed events={events} />
 
       {/* Quick Config */}
       <Card className="bg-zinc-900 border-zinc-800">
