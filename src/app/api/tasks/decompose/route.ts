@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { logTaskActivity } from "@/lib/taskActivity";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,6 +21,15 @@ export async function POST(req: NextRequest) {
 
     // Use LLM to decompose the task
     const decomposition = await decomposeTaskWithLLM(task, model);
+
+    // Log decomposition activity
+    logTaskActivity(
+      taskId,
+      'decomposed',
+      'ui',
+      null,
+      `${decomposition.subtasks.length} subtasks`
+    );
 
     return NextResponse.json({
       ok: true,

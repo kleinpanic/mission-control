@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
       projectId: projectId || null,
     });
 
+    // Log creation activity
+    logTaskActivity(task.id, 'created', 'ui', null, task.title);
+
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {
     console.error('Tasks POST error:', error);
