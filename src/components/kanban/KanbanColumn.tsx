@@ -1,13 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { Task, TaskStatus } from "@/types";
 import { TaskCard } from "./TaskCard";
 import { IntakeApprovalCard } from "./IntakeApprovalCard";
 import { cn } from "@/lib/utils";
+import { Info } from "lucide-react";
 
 interface KanbanColumnProps {
   title: string;
   color: string;
+  description?: string;
   status: TaskStatus;
   tasks: Task[];
   agents?: { id: string; name: string }[];
@@ -25,6 +28,7 @@ interface KanbanColumnProps {
 export function KanbanColumn({
   title,
   color,
+  description,
   status,
   tasks,
   agents,
@@ -38,6 +42,7 @@ export function KanbanColumn({
   onRejectTask,
   onDispatchTask,
 }: KanbanColumnProps) {
+  const [showInfo, setShowInfo] = useState(false);
   const isIntakeColumn = status === "intake";
   // Only show dispatch on ready/intake/backlog columns
   const canDispatch = ["ready", "intake", "backlog"].includes(status) && onDispatchTask && agents && agents.length > 0;
@@ -53,7 +58,26 @@ export function KanbanColumn({
     >
       <div className="p-3 border-b border-zinc-800">
         <div className="flex items-center justify-between">
-          <h3 className="font-medium text-sm text-zinc-100">{title}</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="font-medium text-sm text-zinc-100">{title}</h3>
+            {description && (
+              <div className="relative">
+                <button
+                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                  onMouseEnter={() => setShowInfo(true)}
+                  onMouseLeave={() => setShowInfo(false)}
+                  onClick={() => setShowInfo(!showInfo)}
+                >
+                  <Info className="w-3.5 h-3.5" />
+                </button>
+                {showInfo && (
+                  <div className="absolute left-0 top-6 z-50 w-64 p-2.5 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl text-xs text-zinc-300 leading-relaxed">
+                    {description}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <span className="text-xs text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
             {tasks.length}
           </span>

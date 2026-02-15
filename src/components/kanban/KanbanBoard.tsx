@@ -3,6 +3,7 @@
 import { Task, TaskStatus } from "@/types";
 import { KanbanColumn } from "./KanbanColumn";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Info } from "lucide-react";
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -16,21 +17,29 @@ interface KanbanBoardProps {
   onDispatchTask?: (taskId: string, agentId: string) => void;
 }
 
+// Column metadata with descriptions for info tooltips
+interface ColumnDef {
+  id: TaskStatus;
+  title: string;
+  color: string;
+  description: string;
+}
+
 // Core columns always shown (in order)
-const CORE_COLUMNS: { id: TaskStatus; title: string; color: string }[] = [
-  { id: "intake", title: "Intake", color: "border-purple-500" },
-  { id: "ready", title: "Ready", color: "border-cyan-500" },
-  { id: "in_progress", title: "In Progress", color: "border-blue-500" },
-  { id: "review", title: "Review", color: "border-yellow-500" },
-  { id: "completed", title: "Completed", color: "border-green-500" },
+const CORE_COLUMNS: ColumnDef[] = [
+  { id: "intake", title: "Intake", color: "border-purple-500", description: "New tasks awaiting triage. Approve to move to Ready, or reject to archive. Tasks from Apple Reminders and external sources land here." },
+  { id: "ready", title: "Ready", color: "border-cyan-500", description: "Approved tasks ready for work. Agents pick from here during autonomous mode. Dispatch to assign directly to an agent." },
+  { id: "in_progress", title: "In Progress", color: "border-blue-500", description: "Tasks actively being worked on by an agent. Dispatched tasks move here automatically." },
+  { id: "review", title: "Review", color: "border-yellow-500", description: "Work completed, waiting for Klein's review. Agents must not re-work these — approve to complete, or return to Ready for rework." },
+  { id: "completed", title: "Completed", color: "border-green-500", description: "Done and approved. Tasks stay here for reference before archiving." },
 ];
 
 // Secondary columns only shown if they have tasks
-const SECONDARY_COLUMNS: { id: TaskStatus; title: string; color: string }[] = [
-  { id: "backlog", title: "Backlog", color: "border-zinc-500" },
-  { id: "paused", title: "Paused", color: "border-orange-500" },
-  { id: "blocked", title: "Blocked", color: "border-red-500" },
-  { id: "archived", title: "Archived", color: "border-zinc-700" },
+const SECONDARY_COLUMNS: ColumnDef[] = [
+  { id: "backlog", title: "Backlog", color: "border-zinc-500", description: "Lower priority tasks shelved for later. Not picked up by autonomous agents." },
+  { id: "paused", title: "Paused", color: "border-orange-500", description: "Intentionally paused by Klein. Agents must not pick up or flag these as stale." },
+  { id: "blocked", title: "Blocked", color: "border-red-500", description: "Tasks blocked by external dependencies. Agents escalate here when stuck after 3+ attempts." },
+  { id: "archived", title: "Archived", color: "border-zinc-700", description: "Rejected or obsolete tasks. Hidden from active workflow." },
 ];
 
 export function KanbanBoard({
@@ -98,6 +107,7 @@ export function KanbanBoard({
             <KanbanColumn
               title={column.title}
               color={column.color}
+              description={column.description}
               status={column.id}
               tasks={tasksByStatus[column.id] || []}
               agents={agents}
