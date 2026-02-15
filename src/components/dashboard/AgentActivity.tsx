@@ -53,10 +53,26 @@ export function AgentActivity({ sessions = [] }: AgentActivityProps) {
 
     // First pass: Create nodes
     sessions.forEach(s => {
+      // Derive a better label from session key if label/displayName isn't set
+      let derivedLabel = s.label || s.displayName;
+      if (!derivedLabel) {
+        const parts = s.key.split(':');
+        if (parts.includes('subagent')) {
+          // Subagent session: use the ID after 'subagent'
+          const idx = parts.indexOf('subagent');
+          derivedLabel = `Subagent ${parts[idx + 1]?.slice(0, 8) || 'Worker'}`;
+        } else if (parts.length > 3) {
+          // Other nested session: use last 2 parts
+          derivedLabel = parts.slice(-2).join(' › ');
+        } else {
+          derivedLabel = parts[parts.length - 1] || 'Session';
+        }
+      }
+      
       const session: SubagentSession = {
         key: s.key,
         agentId: s.agentId,
-        label: s.label || s.displayName || s.key.split(':').pop(),
+        label: derivedLabel,
         status: s.percentUsed >= 95 ? "waiting" : (Date.now() - (s.updatedAt || 0) < 60000 ? "active" : "idle"),
         model: s.model || "unknown",
         children: [],
