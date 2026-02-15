@@ -23,6 +23,7 @@ interface KanbanColumnProps {
   onApproveTask?: (taskId: string) => void;
   onRejectTask?: (taskId: string) => void;
   onDispatchTask?: (taskId: string, agentId: string) => void;
+  onDecomposeTask?: (task: Task) => void;
 }
 
 export function KanbanColumn({
@@ -41,6 +42,7 @@ export function KanbanColumn({
   onApproveTask,
   onRejectTask,
   onDispatchTask,
+  onDecomposeTask,
 }: KanbanColumnProps) {
   const [showInfo, setShowInfo] = useState(false);
   const isIntakeColumn = status === "intake";
@@ -110,6 +112,7 @@ export function KanbanColumn({
                 onDelete={() => onDeleteTask(task.id)}
                 onMoveTask={onMoveTask}
                 onDispatchTask={onDispatchTask}
+                onDecompose={() => onDecomposeTask?.(task)}
               />
             )
           )
