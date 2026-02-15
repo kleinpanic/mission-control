@@ -7,11 +7,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface KanbanBoardProps {
   tasks: Task[];
   loading: boolean;
+  agents?: { id: string; name: string }[];
   onMoveTask: (id: string, status: TaskStatus) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onApproveTask?: (taskId: string) => void;
   onRejectTask?: (taskId: string) => void;
+  onDispatchTask?: (taskId: string, agentId: string) => void;
 }
 
 // Core columns always shown (in order)
@@ -34,11 +36,13 @@ const SECONDARY_COLUMNS: { id: TaskStatus; title: string; color: string }[] = [
 export function KanbanBoard({
   tasks,
   loading,
+  agents,
   onMoveTask,
   onEditTask,
   onDeleteTask,
   onApproveTask,
   onRejectTask,
+  onDispatchTask,
 }: KanbanBoardProps) {
   if (loading) {
     return (
@@ -88,10 +92,6 @@ export function KanbanBoard({
     <div className="overflow-x-auto">
       <div
         className="grid gap-3 pb-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
-        style={{
-          // On large screens, show all columns
-          ...(visibleColumns.length <= 5 ? {} : {}),
-        }}
       >
         {visibleColumns.map((column) => (
           <div key={column.id}>
@@ -100,6 +100,7 @@ export function KanbanBoard({
               color={column.color}
               status={column.id}
               tasks={tasksByStatus[column.id] || []}
+              agents={agents}
               onDragStart={handleDragStart}
               onDrop={(e) => handleDrop(e, column.id)}
               onDragOver={handleDragOver}
@@ -108,6 +109,7 @@ export function KanbanBoard({
               onMoveTask={onMoveTask}
               onApproveTask={onApproveTask}
               onRejectTask={onRejectTask}
+              onDispatchTask={onDispatchTask}
             />
           </div>
         ))}

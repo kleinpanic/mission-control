@@ -10,6 +10,7 @@ interface KanbanColumnProps {
   color: string;
   status: TaskStatus;
   tasks: Task[];
+  agents?: { id: string; name: string }[];
   onDragStart: (e: React.DragEvent, taskId: string) => void;
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -18,6 +19,7 @@ interface KanbanColumnProps {
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onApproveTask?: (taskId: string) => void;
   onRejectTask?: (taskId: string) => void;
+  onDispatchTask?: (taskId: string, agentId: string) => void;
 }
 
 export function KanbanColumn({
@@ -25,6 +27,7 @@ export function KanbanColumn({
   color,
   status,
   tasks,
+  agents,
   onDragStart,
   onDrop,
   onDragOver,
@@ -33,8 +36,12 @@ export function KanbanColumn({
   onMoveTask,
   onApproveTask,
   onRejectTask,
+  onDispatchTask,
 }: KanbanColumnProps) {
   const isIntakeColumn = status === "intake";
+  // Only show dispatch on ready/intake/backlog columns
+  const canDispatch = ["ready", "intake", "backlog"].includes(status) && onDispatchTask && agents && agents.length > 0;
+
   return (
     <div
       className={cn(
@@ -73,10 +80,12 @@ export function KanbanColumn({
                 key={task.id}
                 task={task}
                 columnStatus={status}
+                agents={canDispatch ? agents : undefined}
                 onDragStart={(e) => onDragStart(e, task.id)}
                 onEdit={() => onEditTask(task)}
                 onDelete={() => onDeleteTask(task.id)}
                 onMoveTask={onMoveTask}
+                onDispatchTask={onDispatchTask}
               />
             )
           )

@@ -26,6 +26,15 @@ interface Props {
   children: ReactNode;
 }
 
+/**
+ * Retrieve the Mission Control password from localStorage.
+ * Users set this once via the Settings page (or URL param on first load).
+ */
+function getMcPassword(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("mc_password") || "";
+}
+
 export function GatewayProvider({ children }: Props) {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -41,7 +50,7 @@ export function GatewayProvider({ children }: Props) {
   
   // Cache for frequently requested data (30 second TTL)
   const cacheRef = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
-  const CACHE_TTL_MS = 30000; // 30 seconds
+  const CACHE_TTL_MS = 30000;
   
   const { setConnectionStatus, addEvent } = useRealtimeStore();
 
@@ -52,6 +61,9 @@ export function GatewayProvider({ children }: Props) {
       // Handle connect challenge - gateway sends this on connection
       if (msg.type === "event" && msg.event === "connect.challenge") {
         console.log("[Gateway] Received connect.challenge, sending handshake...");
+        // Auth is handled server-side by the proxy.
+        // Send MC password for proxy auth; proxy replaces with real gateway token.
+        const mcPassword = getMcPassword();
         wsRef.current?.send(JSON.stringify({
           type: "req",
           id: "connect",
@@ -60,14 +72,17 @@ export function GatewayProvider({ children }: Props) {
             minProtocol: 3,
             maxProtocol: 3,
             client: {
-              id: "webchat-ui",
-              version: "1.0.0",
+              id: "mission-control",
+              version: "1.2.0",
               platform: "web",
               mode: "webchat"
             },
             role: "operator",
             scopes: ["operator.admin"],
-            auth: { token: process.env.NEXT_PUBLIC_OPENCLAW_GATEWAY_TOKEN || "" }
+            auth: {
+              // MC password for server proxy auth (proxy injects real gateway token)
+              ...(mcPassword ? { mcPassword } : {}),
+            }
           }
         }));
         return;
@@ -86,6 +101,10 @@ export function GatewayProvider({ children }: Props) {
           } else {
             console.error("[Gateway] Connection rejected:", msg.error);
             setConnectionStatus("error", msg.error?.message || "Connection rejected");
+            // If auth failed, don't keep retrying
+            if (msg.error?.code === 401) {
+              reconnectAttempts.current = maxReconnectAttempts;
+            }
           }
           return;
         }
@@ -160,33 +179,24 @@ export function GatewayProvider({ children }: Props) {
     setConnecting(true);
     setConnectionStatus("connecting");
     
-    const getGatewayUrl = () => {
+    // Always connect through the Mission Control server proxy.
+    // The proxy handles gateway auth server-side (token never sent to browser).
+    const getProxyUrl = () => {
       if (process.env.NEXT_PUBLIC_OPENCLAW_GATEWAY_URL) {
         return process.env.NEXT_PUBLIC_OPENCLAW_GATEWAY_URL;
       }
       
       if (typeof window !== "undefined") {
-        const hostname = window.location.hostname;
-        const isLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-        
-        if (isLocal) {
-          // Direct connection when on the same machine
-          return "ws://127.0.0.1:18789";
-        }
-        
-        // Remote access: use the WebSocket proxy on the same origin
-        // The custom server.ts proxies /api/gateway/ws -> ws://127.0.0.1:18789
-        // This avoids needing the gateway to bind on all interfaces
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         return `${protocol}//${window.location.host}/api/gateway/ws`;
       }
       
-      return "ws://127.0.0.1:18789";
+      return "ws://127.0.0.1:3333/api/gateway/ws";
     };
 
-    const resolvedUrl = getGatewayUrl();
+    const resolvedUrl = getProxyUrl();
     setGatewayUrl(resolvedUrl);
-    console.log(`[Gateway] Connecting to ${resolvedUrl}...`);
+    console.log(`[Gateway] Connecting via proxy: ${resolvedUrl}`);
     
     try {
       const ws = new WebSocket(resolvedUrl);
@@ -194,7 +204,6 @@ export function GatewayProvider({ children }: Props) {
       
       ws.onopen = () => {
         console.log("[Gateway] WebSocket opened, waiting for challenge...");
-        // Don't set connected yet - wait for successful handshake
       };
       
       ws.onmessage = (event) => {
@@ -202,12 +211,9 @@ export function GatewayProvider({ children }: Props) {
       };
       
       ws.onerror = (error) => {
-        // WebSocket error events don't contain detailed info in browsers
-        // Log connection state instead for debugging
         console.error("[Gateway] WebSocket error occurred", {
           readyState: ws.readyState,
           url: resolvedUrl,
-          // Error event itself has no useful enumerable properties
         });
         setConnectionStatus("error", "Connection error");
       };
@@ -255,26 +261,23 @@ export function GatewayProvider({ children }: Props) {
         return;
       }
       
-      // Check cache for cacheable methods (status, agents.list)
+      // Check cache for cacheable methods
       const cacheKey = `${method}:${JSON.stringify(params)}`;
       const cacheable = useCache && (method === "status" || method === "agents.list" || method === "usage.cost");
       
       if (cacheable) {
         const cached = cacheRef.current.get(cacheKey);
         if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-          console.log(`[Gateway] Cache hit for ${method}`);
           resolve(cached.data);
           return;
         }
       }
       
-      // crypto.randomUUID() is only available in secure contexts (HTTPS/localhost)
-      // Fall back to a manual UUID for plain HTTP on LAN
+      // crypto.randomUUID() fallback for non-secure contexts
       const id = typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
         : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
       
-      // Set timeout (30 seconds)
       const timer = setTimeout(() => {
         if (pendingRef.current.has(id)) {
           pendingRef.current.delete(id);
@@ -284,7 +287,6 @@ export function GatewayProvider({ children }: Props) {
       
       pendingRef.current.set(id, { 
         resolve: (data: T) => {
-          // Cache the result if cacheable
           if (cacheable) {
             cacheRef.current.set(cacheKey, { data, timestamp: Date.now() });
           }
@@ -311,7 +313,6 @@ export function GatewayProvider({ children }: Props) {
     }
     subscribersRef.current.get(event)!.add(handler);
     
-    // Return unsubscribe function
     return () => {
       subscribersRef.current.get(event)?.delete(handler);
     };
@@ -327,7 +328,6 @@ export function GatewayProvider({ children }: Props) {
       if (wsRef.current) {
         wsRef.current.close();
       }
-      // Clear pending requests
       pendingRef.current.forEach(({ timer }) => clearTimeout(timer));
       pendingRef.current.clear();
     };

@@ -1,9 +1,10 @@
 /**
  * Custom Next.js server with WebSocket proxy.
  *
- * When Mission Control is accessed from a non-localhost client (e.g., LAN),
- * the browser can't reach ws://127.0.0.1:18789 directly. This server proxies
- * WebSocket connections on /api/gateway/ws to the local gateway.
+ * Security model:
+ * - Clients authenticate to Mission Control with MISSION_CONTROL_PASSWORD
+ * - Server proxies to gateway using OPENCLAW_GATEWAY_TOKEN (never sent to client)
+ * - If no password is set, auth is disabled (local-only use)
  */
 
 import { createServer } from "http";
@@ -15,6 +16,8 @@ const port = parseInt(process.env.PORT || process.env.MISSION_CONTROL_PORT || "3
 const hostname = "0.0.0.0";
 
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || "ws://127.0.0.1:18789";
+const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
+const MC_PASSWORD = process.env.MISSION_CONTROL_PASSWORD || "";
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -32,27 +35,96 @@ app.prepare().then(() => {
 
     if (pathname === "/api/gateway/ws") {
       wss.handleUpgrade(req, socket, head, (clientWs) => {
-        // Connect to the real gateway, forwarding the original Origin header
-        const gatewayWs = new WebSocket(GATEWAY_URL, {
+        let gatewayWs: WebSocket | null = null;
+        let clientClosed = false;
+        let gatewayClosed = false;
+        let clientAuthenticated = !MC_PASSWORD; // auto-auth if no password set
+        let gatewayConnected = false;
+        let pendingMessages: string[] = [];
+
+        // Connect to the real gateway
+        gatewayWs = new WebSocket(GATEWAY_URL, {
           headers: {
             Origin: req.headers.origin || req.headers.host || "http://localhost:3333"
           }
         });
-        let clientClosed = false;
-        let gatewayClosed = false;
 
         gatewayWs.on("open", () => {
           console.log("[WS Proxy] Connected to gateway");
+          gatewayConnected = true;
+          // Flush any pending messages
+          for (const msg of pendingMessages) {
+            gatewayWs!.send(msg);
+          }
+          pendingMessages = [];
         });
 
-        // Proxy: client -> gateway (forward as text string)
+        // Proxy: client -> gateway
+        // Intercept connect messages to inject the real gateway token
         clientWs.on("message", (data, isBinary) => {
-          if (gatewayWs.readyState === WebSocket.OPEN) {
-            gatewayWs.send(isBinary ? data : data.toString());
+          const raw = isBinary ? data : data.toString();
+          const str = typeof raw === "string" ? raw : raw.toString();
+
+          try {
+            const msg = JSON.parse(str);
+
+            // Intercept connect handshake — inject real gateway token
+            if (msg.type === "req" && msg.method === "connect") {
+              // Check MC password if configured
+              if (MC_PASSWORD && !clientAuthenticated) {
+                const clientPassword = msg.params?.auth?.mcPassword || msg.params?.auth?.password || "";
+                if (clientPassword !== MC_PASSWORD) {
+                  clientWs.send(JSON.stringify({
+                    type: "res",
+                    id: msg.id,
+                    ok: false,
+                    error: { code: 401, message: "Invalid Mission Control password" }
+                  }));
+                  clientWs.close(4001, "Authentication failed");
+                  return;
+                }
+                clientAuthenticated = true;
+              }
+
+              // Replace client auth with real gateway token
+              if (!msg.params) msg.params = {};
+              if (!msg.params.auth) msg.params.auth = {};
+              msg.params.auth.token = GATEWAY_TOKEN;
+              // Remove MC-specific auth fields
+              delete msg.params.auth.mcPassword;
+              delete msg.params.auth.password;
+
+              const rewritten = JSON.stringify(msg);
+              if (gatewayConnected && gatewayWs?.readyState === WebSocket.OPEN) {
+                gatewayWs.send(rewritten);
+              } else {
+                pendingMessages.push(rewritten);
+              }
+              return;
+            }
+          } catch {
+            // Not JSON, pass through
+          }
+
+          // Pass through all other messages
+          if (!clientAuthenticated) {
+            clientWs.send(JSON.stringify({
+              type: "res",
+              id: "auth-required",
+              ok: false,
+              error: { code: 401, message: "Authentication required" }
+            }));
+            return;
+          }
+
+          if (gatewayConnected && gatewayWs?.readyState === WebSocket.OPEN) {
+            gatewayWs.send(str);
+          } else {
+            pendingMessages.push(str);
           }
         });
 
-        // Proxy: gateway -> client (forward as text to avoid Blob in browser)
+        // Proxy: gateway -> client
         gatewayWs.on("message", (data, isBinary) => {
           if (clientWs.readyState === WebSocket.OPEN) {
             clientWs.send(data.toString(), { binary: false });
@@ -61,7 +133,7 @@ app.prepare().then(() => {
 
         clientWs.on("close", () => {
           clientClosed = true;
-          if (!gatewayClosed) {
+          if (!gatewayClosed && gatewayWs) {
             gatewayWs.close();
           }
           console.log("[WS Proxy] Client disconnected");
@@ -77,7 +149,7 @@ app.prepare().then(() => {
 
         clientWs.on("error", (err) => {
           console.error("[WS Proxy] Client error:", err.message);
-          if (!gatewayClosed) gatewayWs.close();
+          if (!gatewayClosed && gatewayWs) gatewayWs.close();
         });
 
         gatewayWs.on("error", (err) => {
@@ -87,12 +159,12 @@ app.prepare().then(() => {
       });
     } else {
       // Let Next.js handle HMR WebSocket upgrades
-      // Don't destroy the socket — Next.js dev server needs it
     }
   });
 
   server.listen(port, hostname, () => {
     console.log(`> Mission Control ready on http://${hostname}:${port}`);
     console.log(`> Gateway proxy: /api/gateway/ws -> ${GATEWAY_URL}`);
+    console.log(`> Auth: ${MC_PASSWORD ? "Password required" : "No password (local only)"}`);
   });
 });

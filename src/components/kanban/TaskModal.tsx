@@ -20,9 +20,8 @@ interface TaskModalProps {
   onClose: () => void;
   onSubmit: (task: Omit<Task, "id" | "createdAt" | "updatedAt">) => void;
   task?: Task | null;
+  agents?: { id: string; name: string }[];
 }
-
-const DEFAULT_AGENTS = ["main", "dev", "ops", "school", "research", "meta", "taskmaster"];
 
 const COMMON_MODELS = [
   "anthropic/claude-opus-4-6",
@@ -32,7 +31,7 @@ const COMMON_MODELS = [
   "openai/gpt-5.2",
 ];
 
-export function TaskModal({ open, onClose, onSubmit, task }: TaskModalProps) {
+export function TaskModal({ open, onClose, onSubmit, task, agents = [] }: TaskModalProps) {
   // Basic fields
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -215,9 +214,9 @@ export function TaskModal({ open, onClose, onSubmit, task }: TaskModalProps) {
                   className="w-full h-10 px-3 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100"
                 >
                   <option value="">Unassigned</option>
-                  {DEFAULT_AGENTS.map((agent) => (
-                    <option key={agent} value={agent}>
-                      {agent}
+                  {agents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name} ({agent.id})
                     </option>
                   ))}
                 </select>
