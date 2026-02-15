@@ -66,7 +66,13 @@
 **Commits:**
 - `1b476e7` - Task Decomposition API and UI
 
-**Next:** Integrate decompose trigger into Kanban UI + browser validation
+**Completed:**
+- ✅ Integrated decompose button into Kanban UI (TaskCard dropdown menu)
+- ✅ Browser tested - modal opens successfully
+- ✅ DecomposeModal displays task info + "Generate Subtasks" button
+- ✅ All UI components wired correctly through component chain
+
+**Next:** Test full decomposition flow (generate → preview → approve → create subtasks)
 
 ## Phase 3: Feature 3 - Issue Discovery Mode
 
