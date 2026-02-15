@@ -9,18 +9,23 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, Bot, Play, Pause, ArrowRight, RotateCcw, CheckCircle, Archive } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Bot, Play, Pause, ArrowRight, RotateCcw, CheckCircle, Archive, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TaskCardProps {
   task: Task;
   columnStatus: TaskStatus;
+  agents?: { id: string; name: string }[];
   onDragStart: (e: React.DragEvent) => void;
   onEdit: () => void;
   onDelete: () => void;
   onMoveTask?: (id: string, status: TaskStatus) => void;
+  onDispatchTask?: (taskId: string, agentId: string) => void;
 }
 
 const priorityColors: Record<string, string> = {
@@ -69,9 +74,10 @@ function getQuickActions(status: TaskStatus): { label: string; target: TaskStatu
   }
 }
 
-export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, onMoveTask }: TaskCardProps) {
+export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDelete, onMoveTask, onDispatchTask }: TaskCardProps) {
   const priority = priorityColors[task.priority] || priorityColors.medium;
   const quickActions = getQuickActions(columnStatus);
+  const canDispatch = agents && agents.length > 0 && onDispatchTask && ["ready", "intake", "backlog"].includes(columnStatus);
 
   return (
     <Card
@@ -99,6 +105,28 @@ export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, on
               <DropdownMenuItem onClick={onEdit} className="text-zinc-300 focus:bg-zinc-700 text-xs">
                 <Pencil className="w-3 h-3 mr-2" /> Edit
               </DropdownMenuItem>
+              
+              {/* Dispatch to Agent submenu */}
+              {canDispatch && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="text-zinc-300 focus:bg-zinc-700 text-xs">
+                    <Send className="w-3 h-3 mr-2" /> Dispatch to Agent
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="bg-zinc-800 border-zinc-700">
+                    {agents.map((agent) => (
+                      <DropdownMenuItem
+                        key={agent.id}
+                        onClick={() => onDispatchTask!(task.id, agent.id)}
+                        className="text-zinc-300 focus:bg-zinc-700 text-xs"
+                      >
+                        <Bot className="w-3 h-3 mr-2" />
+                        {agent.name} ({agent.id})
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+
               {onMoveTask && (
                 <>
                   <DropdownMenuSeparator className="bg-zinc-700" />
@@ -155,7 +183,7 @@ export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, on
         {task.tags && task.tags.length > 0 && (
           <div className="flex gap-1 flex-wrap">
             {task.tags
-              .map(tag => tag.replace(/[\[\]"]/g, '').trim()) // Clean corrupted JSON fragments
+              .map(tag => tag.replace(/[\[\]"]/g, '').trim())
               .filter(tag => tag.length > 0)
               .slice(0, 3)
               .map((tag) => (
@@ -170,25 +198,54 @@ export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, on
         )}
 
         {/* Quick action buttons */}
-        {quickActions.length > 0 && onMoveTask && (
-          <div className="flex gap-1 pt-0.5">
-            {quickActions.map((action) => (
-              <Button
-                key={action.target}
-                variant="secondary"
-                size="sm"
-                className="h-5 text-[10px] px-1.5 bg-zinc-700/50 hover:bg-zinc-600 text-zinc-300"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onMoveTask(task.id, action.target);
-                }}
-              >
-                <action.icon className="w-2.5 h-2.5 mr-0.5" />
-                {action.label}
-              </Button>
-            ))}
-          </div>
-        )}
+        <div className="flex gap-1 pt-0.5">
+          {quickActions.length > 0 && onMoveTask && quickActions.map((action) => (
+            <Button
+              key={action.target}
+              variant="secondary"
+              size="sm"
+              className="h-5 text-[10px] px-1.5 bg-zinc-700/50 hover:bg-zinc-600 text-zinc-300"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveTask(task.id, action.target);
+              }}
+            >
+              <action.icon className="w-2.5 h-2.5 mr-0.5" />
+              {action.label}
+            </Button>
+          ))}
+          {/* Dispatch button for ready tasks */}
+          {canDispatch && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-5 text-[10px] px-1.5 bg-orange-700/50 hover:bg-orange-600 text-orange-200"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Send className="w-2.5 h-2.5 mr-0.5" />
+                  Dispatch
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="bg-zinc-800 border-zinc-700">
+                {agents.map((agent) => (
+                  <DropdownMenuItem
+                    key={agent.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDispatchTask!(task.id, agent.id);
+                    }}
+                    className="text-zinc-300 focus:bg-zinc-700 text-xs"
+                  >
+                    <Bot className="w-3 h-3 mr-2" />
+                    {agent.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
