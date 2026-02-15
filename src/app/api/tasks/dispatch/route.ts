@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTask, updateTask } from '@/lib/db';
 import { logTaskActivity } from '@/lib/taskActivity';
+import { DispatchTaskSchema, validateRequest } from '@/lib/validation';
 
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:18789';
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
@@ -45,14 +46,17 @@ async function gatewayRequest(method: string, params: Record<string, any>): Prom
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { taskId, agentId, notify = true } = body;
-
-    if (!taskId || !agentId) {
+    
+    // Validate request body
+    const validation = validateRequest(DispatchTaskSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'Missing taskId or agentId' },
+        { error: validation.error.message, issues: validation.error.issues },
         { status: 400 }
       );
     }
+
+    const { taskId, agentId, notify } = validation.data;
 
     // 1. Load the task
     const task = getTask(taskId);
