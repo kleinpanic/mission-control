@@ -1,136 +1,61 @@
-# Mission Control - Autonomous Work Progress
+# Mission Control Feature Integration - Progress
 
-## Status: IN_PROGRESS
+**Session:** auto-1771119257
+**Started:** 2026-02-14 20:34 EST
+**Task:** Build Issue Discovery + Task Decomposition + Slack-Kanban integration with autonomous browser testing
 
-## Session: auto-1771059781 (Round 3)
-Started: 2026-02-14T04:03:01-05:00  
-Previous: auto-1770952335 (completed systematic debugging)  
-Current: Phase 2 - Implementing Fixes
+## Phase 1: Feature 1 - Slack-Kanban Integration
 
-## Previous Session Summary (auto-1770952335)
-- Fixed critical WebSocket UUID issue
-- Fixed cost breakdowns (use historyData)
-- Fixed settings default model display
-- Identified root causes for remaining issues
-- 8 commits pushed to `fix/round3-critical-fixes`
+### Tasks
+- [ ] Create `/api/slack/commands` endpoint for slash commands
+- [ ] Implement `/kanban view` command
+- [ ] Implement `/kanban add <title>` command
+- [ ] Implement `/kanban move <id> <status>` command
+- [ ] Implement `/kanban next` command
+- [ ] Implement `/kanban assign <id> <agent>` command
+- [ ] Create Block Kit interactive message builder
+- [ ] Implement bidirectional sync (Slack ↔ Mission Control ↔ oc-tasks)
+- [ ] Add agent activity feed
+- [ ] Browser test all slash commands
+- [ ] Browser test interactive buttons
 
-## Critical Fix - COMPLETE ✅
+### Status
+Starting implementation...
 
-**Root Cause:** `crypto.randomUUID()` fails in non-secure HTTP contexts (only works on HTTPS or localhost).  
-**Impact:** ALL WebSocket requests failed → empty dashboards, agents, costs, sessions.  
-**Solution:** Added fallback to timestamp+random for HTTP contexts.  
-**Result:** Klein confirmed "a lot better" - data now loading from localhost! ✅
+## Phase 2: Feature 2 - Task Decomposition System
 
-**Commits:**
-- `fa09c8a` - crypto.randomUUID fallback for non-secure contexts  
-- `e1d6ca3` - Use WebSocket proxy for remote LAN access
-- `93a4160` - WebSocket proxy text frame fix
-- `cbb57cd` - Forward Origin header through proxy for auth
-- `29a72f9` - docs update
-- `d5f5b8d` - Fix cost breakdowns (use historyData)
-- `419ab5f` - docs: cron investigation findings
-- `3865102` - Settings default model display + channels debug
+### Tasks
+- [ ] Add decomposition UI to Mission Control
+- [ ] Create `/api/tasks/decompose` endpoint
+- [ ] Implement LLM-powered task breakdown
+- [ ] Add preview/approve workflow
+- [ ] Update oc-tasks schema for `parentId` hierarchy
+- [ ] Browser test decomposition flow
 
-## Issues - Systematic Breakdown
+### Status
+Waiting for Phase 1...
 
-### ✅ FIXED (Committed)
-1. **Cost breakdowns** - "By Provider" and "By Model" now populate from historyData instead of empty summary fields
-2. **Settings default model** - Dropdown now shows actual default from config (was hardcoded "gpt-5.2")
+## Phase 3: Feature 3 - Issue Discovery Mode
 
-### 🔍 ROOT CAUSE IDENTIFIED (Needs Klein's Input)
+### Tasks
+- [ ] Create `/api/discovery/scan` endpoint
+- [ ] Integrate static analysis tools (ESLint, TypeScript)
+- [ ] Add GitHub issue sync
+- [ ] Create discovery dashboard UI
+- [ ] Add filters (severity, category, project, agent)
+- [ ] Browser test discovery workflow
 
-**Cron counts (10/10/0 vs 22/10/12):**
-- ✅ API works correctly: returns 22 jobs (10 enabled, 12 disabled)
-- ✅ Backend calls `openclaw cron list --all`
-- ❓ Frontend logic correct
-- **Hypothesis:** Browser cache (30s API cache + 60s refresh)
-- **Action:** Klein please hard refresh (Ctrl+Shift+R) and report
+### Status
+Waiting for Phase 2...
 
-**Session compaction (11 eligible → 0 compacted):**
-- ✅ UI correctly identifies 11 eligible sessions
-- ✅ Code calls `sessions.compact` WebSocket method for each
-- ❌ **OpenClaw CLI has NO `compact` command** (verified)
-- ❌ Errors silently swallowed in try/catch
-- **Hypothesis:** `sessions.compact` WebSocket method doesn't exist
-- **Action:** Klein please verify if gateway actually has this method
+## Browser Testing Checklist
+- [ ] Screenshot all new pages
+- [ ] Test all API endpoints
+- [ ] Interact with UI elements
+- [ ] Verify WebSocket updates
+- [ ] Check error handling
 
-### 📋 TODO (Lower Priority)
-1. **Cost by Agent** - Empty (known limitation - requires session log parsing implementation)
-2. **Connected channels** - Shows nothing (added debug logging, need to check browser console)
-3. **Analytics "4 errors"** - Not investigated yet
-4. **Agent status bugs** - Dev/Meta show "disabled" + "waiting" (contradictory)
-5. **Session cleanup** - 55 total sessions need cleanup policy
-6. **Kanban UI** - Visual polish requested
-
-## Technical Findings
-
-### Cost Data Flow
-```
-Frontend needs:
-  - byProvider (for breakdown card)
-  - byModel (for breakdown card)
-  - byAgent (for chart)
-
-Data sources:
-  - /api/costs → calls codexbar --pretty → returns EMPTY data
-  - /api/costs/history → calls codexbar --format json → returns REAL data
-  
-Fix: Use historyData.byProvider/byModel instead of summary
-```
-
-### Cron Data Flow
-```
-CLI: openclaw cron list --all
-→ 22 jobs total (10 enabled, 12 disabled) ✅
-
-API: /api/cron (calls same CLI with --all flag)
-→ Returns all 22 jobs correctly ✅
-
-Frontend: Shows 10/10/0
-→ Either cache or state issue
-```
-
-### Session Compaction
-```
-Frontend: CompactionPolicies.tsx
-→ Calls request("sessions.compact", { sessionKey })
-
-OpenClaw CLI: openclaw sessions --help
-→ NO compact subcommand ❌
-
-OpenClaw CLI: openclaw --help | grep compact
-→ NO compact command anywhere ❌
-
-Conclusion: Method likely doesn't exist in gateway
-```
-
-## Files Modified (7 commits)
-- `src/providers/GatewayProvider.tsx` - crypto.randomUUID fix + proxy routing
-- `server.ts` - WebSocket proxy text frame fix + Origin forwarding
-- `src/app/costs/page.tsx` - Use historyData for cost breakdowns
-- `src/app/settings/page.tsx` - Dynamic default model label + channels debug
-- `.env.local` - Removed hardcoded WireGuard URL
-- `PROGRESS.md` - Comprehensive documentation
-
-## Branch
-`fix/round3-critical-fixes` (7 commits ready to merge)
-
-## Next Steps
-1. **Wait for Klein's verification:**
-   - Hard refresh cron page → does it show 22/10/12?
-   - Check browser console on sessions page → what error for compaction?
-   - Check settings page console → what's in channels debug log?
-
-2. **Once verified:**
-   - Fix session compaction (either implement API endpoint or remove feature)
-   - Fix channels display (config structure mismatch)
-   - Investigate analytics errors
-   - Clean up 55 sessions
-   - Polish kanban UI
-
-## Evidence
-- Klein: "Wow.... you rlly did it gang... a lot better.." ✅
-- Critical WebSocket blocker resolved ✅  
-- Cost data now displaying (awaiting verification)
-- Settings default model now dynamic (awaiting verification)
-- Core issues systematically root-caused 🎯
+## Notes
+- Klein approved all features, no effort estimates needed
+- Focus on implementation + autonomous testing
+- Use browser automation for validation
