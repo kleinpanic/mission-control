@@ -15,6 +15,9 @@ import {
   Settings,
   Menu,
   X,
+  TrendingUp,
+  CheckCircle,
+  Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -22,9 +25,12 @@ const routes = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Agents', href: '/agents', icon: Users },
   { name: 'Kanban', href: '/kanban', icon: KanbanSquare },
+  { name: 'Velocity', href: '/velocity', icon: TrendingUp },
   { name: 'Costs', href: '/costs', icon: DollarSign },
   { name: 'Cron', href: '/cron', icon: Clock },
   { name: 'Sessions', href: '/sessions', icon: MessageSquare },
+  { name: 'Approvals', href: '/approvals', icon: CheckCircle },
+  { name: 'Evolver', href: '/evolver', icon: Zap },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];

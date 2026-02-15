@@ -10,7 +10,7 @@ import { QuickAdd } from "@/components/tasks/QuickAdd";
 import { TaskSearch, TaskFilters } from "@/components/kanban/TaskSearch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, RefreshCw, ChevronDown, ChevronRight, ArrowUpRight } from "lucide-react";
+import { Plus, RefreshCw, ChevronDown, ChevronRight, ArrowUpRight, Wand2 } from "lucide-react";
 import { Task } from "@/types";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -125,6 +125,49 @@ export default function KanbanPage() {
     await fetchTasks();
     setRefreshing(false);
     toast.success("Tasks refreshed");
+  };
+
+  const handleAutoDecompose = async () => {
+    try {
+      const res = await fetch("/api/tasks/auto-decompose?list=eligible");
+      const data = await res.json();
+      
+      if (!data.eligible || data.eligible.length === 0) {
+        toast.info("No tasks eligible for auto-decomposition", {
+          description: "Only moderate/epic tasks without subtasks can be decomposed.",
+        });
+        return;
+      }
+
+      // Show confirmation dialog
+      const taskTitles = data.eligible.map((t: any) => t.title).join(", ");
+      const confirmed = window.confirm(
+        `Auto-decompose ${data.eligible.length} task(s)?\n\n${taskTitles}\n\nThis will create subtasks automatically.`
+      );
+
+      if (!confirmed) return;
+
+      // Trigger decomposition for all eligible tasks
+      const decomposeRes = await fetch("/api/tasks/auto-decompose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scanAll: true }),
+      });
+
+      const decomposeData = await decomposeRes.json();
+
+      if (decomposeData.ok) {
+        toast.success(`Decomposed ${decomposeData.results?.length || 0} task(s)`, {
+          description: "Subtasks created. Refreshing board...",
+        });
+        await fetchTasks();
+      } else {
+        toast.error(decomposeData.error || "Failed to decompose tasks");
+      }
+    } catch (error) {
+      console.error("Failed to auto-decompose:", error);
+      toast.error("Failed to decompose tasks");
+    }
   };
 
   const handleCreateTask = async (task: Omit<Task, "id" | "createdAt" | "updatedAt">) => {
@@ -317,6 +360,15 @@ export default function KanbanPage() {
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
             Sync
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleAutoDecompose}
+            className="bg-purple-900 hover:bg-purple-800 text-purple-100"
+          >
+            <Wand2 className="w-4 h-4 mr-2" />
+            Auto-Decompose
           </Button>
           <Button
             onClick={() => setIsModalOpen(true)}

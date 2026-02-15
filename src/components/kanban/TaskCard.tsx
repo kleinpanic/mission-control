@@ -14,7 +14,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, Bot, Play, Pause, ArrowRight, RotateCcw, CheckCircle, Archive, Send, GitBranch } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Bot, Play, Pause, ArrowRight, RotateCcw, CheckCircle, Archive, Send, GitBranch, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TaskCardProps {
@@ -235,6 +235,15 @@ export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDe
           )}
           {task.type === "auto" && (
             <Badge className="text-[10px] px-1 py-0 h-4 bg-purple-700/60 text-purple-200">auto</Badge>
+          )}
+          {task.parentId && (
+            <Badge 
+              className="text-[10px] px-1 py-0 h-4 bg-indigo-700/60 text-indigo-200" 
+              title={`Subtask of ${task.parentId}`}
+            >
+              <Network className="w-2.5 h-2.5 mr-0.5" />
+              subtask
+            </Badge>
           )}
         </div>
 

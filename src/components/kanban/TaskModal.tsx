@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sparkles } from "lucide-react";
+import { toast } from "sonner";
 
 interface TaskModalProps {
   open: boolean;
@@ -96,6 +98,38 @@ export function TaskModal({ open, onClose, onSubmit, task, agents = [] }: TaskMo
       setProjectId("");
     }
   }, [task, open]);
+
+  const handleSmartAssign = async () => {
+    if (!task?.id) {
+      toast.error("Cannot recommend agent for unsaved task");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/tasks/velocity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          action: "recommend", 
+          taskId: task.id 
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.recommendation) {
+        setAssignedTo(data.recommendation.agent);
+        toast.success(`Recommended: ${data.recommendation.agent}`, {
+          description: `Velocity: ${data.recommendation.velocity_score.toFixed(1)} | Success: ${data.recommendation.success_rate.toFixed(1)}%`,
+        });
+      } else {
+        toast.error(data.error || "No recommendation available");
+      }
+    } catch (error) {
+      console.error("Failed to get recommendation:", error);
+      toast.error("Failed to get smart assignment recommendation");
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,7 +240,21 @@ export function TaskModal({ open, onClose, onSubmit, task, agents = [] }: TaskMo
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="assignedTo">Assign to Agent</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="assignedTo">Assign to Agent</Label>
+                  {task && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleSmartAssign}
+                      className="text-purple-400 hover:text-purple-300 hover:bg-purple-950/50 h-7 px-2"
+                    >
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      Smart Assign
+                    </Button>
+                  )}
+                </div>
                 <select
                   id="assignedTo"
                   value={assignedTo}
