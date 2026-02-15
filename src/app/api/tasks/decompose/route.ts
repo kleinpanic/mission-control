@@ -71,6 +71,10 @@ Respond in JSON format:
   ]
 }`;
 
+  // DECOMPOSITION PIPELINE ONLY: Gemini OAuth → API keys → Local (Ollama) fallback
+  // This provider chain is ONLY for task decomposition, not for agents
+  const preferredModel = modelOverride || process.env.DECOMPOSE_MODEL || "google-gemini-cli/gemini-3-flash-preview";
+  
   const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
     method: "POST",
     headers: {
@@ -78,7 +82,7 @@ Respond in JSON format:
       Authorization: `Bearer ${gatewayToken}`,
     },
     body: JSON.stringify({
-      model: modelOverride || "gemini-3-flash-preview",
+      model: preferredModel,
       messages: [
         {
           role: "system",
