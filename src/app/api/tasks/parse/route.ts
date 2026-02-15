@@ -1,5 +1,9 @@
 // Mission Control - Natural Language Task Parser
 import { NextRequest, NextResponse } from 'next/server';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,10 +12,6 @@ export async function POST(req: NextRequest) {
     if (!text || typeof text !== 'string') {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
     }
-
-    // Call OpenClaw gateway to use Gemini Flash for parsing
-    const gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789';
-    const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN || '';
 
     const prompt = `You are a task parser for a task management system. Parse this natural language task into structured fields.
 
@@ -25,7 +25,7 @@ Extract:
 - assignedTo: agent ID if mentioned (e.g., "for dev", "dev should", "assign to ops") - use agent IDs: main, dev, school, ops, research, taskmaster, meta
 - tags: array of relevant tags extracted from context (e.g., "code", "bug", "urgent", "school", "homework")
 
-Respond in JSON format:
+Respond ONLY with valid JSON (no markdown, no code blocks):
 {
   "title": "string",
   "description": "string or null",
@@ -35,47 +35,31 @@ Respond in JSON format:
   "tags": ["tag1", "tag2"]
 }`;
 
-    const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${gatewayToken}`,
-      },
-      body: JSON.stringify({
-        model: 'google-gemini-cli/gemini-3-flash-preview',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a task parser. Always respond with valid JSON.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: 500,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`LLM request failed: ${response.status}`);
+    // Use openclaw agent with Gemini Flash (cheap)
+    const command = `openclaw agent --agent research --message ${JSON.stringify(prompt)} --model google-gemini-cli/gemini-3-flash-preview --thinking none`;
+    
+    const { stdout, stderr } = await execAsync(command, { timeout: 30000 });
+    
+    if (stderr && !stderr.includes('[plugins]')) {
+      console.warn('gemini stderr:', stderr);
     }
 
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-
-    if (!content) {
-      throw new Error('No response from LLM');
+    let content = stdout.trim();
+    
+    // Extract JSON from response (sometimes wrapped in markdown)
+    if (content.includes('```json')) {
+      const match = content.match(/```json\n([\s\S]*?)\n```/);
+      if (match) {
+        content = match[1];
+      }
+    } else if (content.includes('```')) {
+      const match = content.match(/```\n?([\s\S]*?)\n?```/);
+      if (match) {
+        content = match[1];
+      }
     }
-
-    // Parse JSON response (handle markdown code blocks if present)
-    let jsonContent = content.trim();
-    if (jsonContent.startsWith('```')) {
-      jsonContent = jsonContent.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-    }
-
-    const parsed = JSON.parse(jsonContent);
+    
+    const parsed = JSON.parse(content);
 
     // Validate required field
     if (!parsed.title) {
