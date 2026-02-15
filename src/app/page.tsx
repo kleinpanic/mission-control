@@ -105,9 +105,9 @@ export default function Dashboard() {
       // Fetch all data in parallel
       // Note: Prefer HTTP endpoints to avoid WebSocket pairing issues
       const [agentsResult, statusResult, costsResult, cronResult, channelsResult, tasksResult] = await Promise.all([
-        // Try WebSocket first, fall back to HTTP API
-        (connected ? request<any>("agents.list").catch(() => null) : Promise.resolve(null))
-          .then(ws => ws || fetch("/api/agents").then(r => r.json()).catch(e => { console.error("agents API error:", e); return null; })),
+        // Always prefer HTTP /api/agents (enriched with runtime data: sessions, lastActivity, heartbeat)
+        // WS agents.list only has config data without runtime enrichment
+        fetch("/api/agents").then(r => r.json()).catch(e => { console.error("agents API error:", e); return null; }),
         fetch("/api/status").then(r => r.json()).catch(e => { console.error("status API error:", e); return null; }),
         fetch("/api/costs").then(r => r.json()).catch(e => { console.error("costs API error:", e); return null; }),
         (connected ? request<any>("cron.list").catch(() => null) : Promise.resolve(null))
