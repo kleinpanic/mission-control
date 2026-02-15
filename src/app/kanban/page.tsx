@@ -28,7 +28,7 @@ export default function KanbanPage() {
 
   const fetchTasks = useCallback(async () => {
     try {
-      const res = await fetch("/api/tasks");
+      const res = await fetch("/api/tasks?list=agents,shared");
       const data = await res.json();
       if (data.tasks) {
         setTasks(data.tasks);

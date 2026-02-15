@@ -115,7 +115,7 @@ export default function Dashboard() {
         (connected ? request<any>("cron.list").catch(() => null) : Promise.resolve(null))
           .then(ws => ws || fetch("/api/cron").then(r => r.json()).catch(e => { console.error("cron API error:", e); return null; })),
         fetch("/api/channels").then(r => r.json()).catch(e => { console.error("channels API error:", e); return null; }),
-        fetch("/api/tasks?status=completed,review").then(r => r.json()).catch(e => { console.error("tasks API error:", e); return null; }),
+        fetch("/api/tasks?status=completed,review&list=agents,shared").then(r => r.json()).catch(e => { console.error("tasks API error:", e); return null; }),
         fetch("/api/rate-limits").then(r => r.json()).catch(e => { console.error("rate-limits API error:", e); return null; }),
       ]);
       
