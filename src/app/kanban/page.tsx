@@ -10,9 +10,10 @@ import { QuickAdd } from "@/components/tasks/QuickAdd";
 import { TaskSearch, TaskFilters } from "@/components/kanban/TaskSearch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, ChevronDown, ChevronRight, ArrowUpRight } from "lucide-react";
 import { Task } from "@/types";
 import { toast } from "sonner";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function KanbanPage() {
   const { tasks, setTasks, addTask, updateTask, deleteTask, moveTask } = useTasksStore();
@@ -24,6 +25,8 @@ export default function KanbanPage() {
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<TaskFilters>({});
+  const [personalTasks, setPersonalTasks] = useState<Task[]>([]);
+  const [showPersonal, setShowPersonal] = useState(false);
   const { connected, request } = useGateway();
 
   const fetchTasks = useCallback(async () => {
@@ -39,6 +42,16 @@ export default function KanbanPage() {
       setLoading(false);
     }
   }, [setTasks]);
+
+  const fetchPersonalTasks = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tasks?list=personal");
+      const data = await res.json();
+      if (data.tasks) setPersonalTasks(data.tasks);
+    } catch (error) {
+      console.error("Failed to fetch personal tasks:", error);
+    }
+  }, []);
 
   // Fetch agents from gateway for dispatch dropdown
   const fetchAgents = useCallback(async () => {
@@ -60,6 +73,10 @@ export default function KanbanPage() {
   useEffect(() => {
     fetchAgents();
   }, [fetchAgents]);
+
+  useEffect(() => {
+    if (showPersonal) fetchPersonalTasks();
+  }, [showPersonal, fetchPersonalTasks]);
 
   // Periodic refresh every 30s to catch external DB changes (oc-tasks CLI)
   useEffect(() => {
@@ -244,6 +261,25 @@ export default function KanbanPage() {
     }
   };
 
+  const handlePromoteToAgent = async (taskId: string) => {
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: taskId, list: "agents" }),
+      });
+      const data = await res.json();
+      if (data.task) {
+        setPersonalTasks(prev => prev.filter(t => t.id !== taskId));
+        addTask(data.task);
+        toast.success("Moved to agent board");
+      }
+    } catch (error) {
+      console.error("Failed to promote task:", error);
+      toast.error("Failed to move task");
+    }
+  };
+
   const readyCount = tasks.filter(t => t.status === "ready").length;
   const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
   const reviewCount = tasks.filter(t => t.status === "review").length;
@@ -325,6 +361,64 @@ export default function KanbanPage() {
           onDecomposeTask={setDecomposeTask}
           onPauseTask={handlePauseTask}
         />
+      </div>
+
+      {/* Personal Tasks Panel */}
+      <div className="border-t border-zinc-800 pt-2">
+        <button
+          onClick={() => setShowPersonal(!showPersonal)}
+          className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors py-2"
+        >
+          {showPersonal ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          Personal Tasks
+          {personalTasks.length > 0 && (
+            <Badge variant="outline" className="text-xs text-zinc-500 border-zinc-700">
+              {personalTasks.filter(t => t.status !== "completed" && t.status !== "archived").length}
+            </Badge>
+          )}
+        </button>
+        {showPersonal && (
+          <div className="grid gap-2 mt-2 max-h-64 overflow-y-auto">
+            {personalTasks.filter(t => t.status !== "completed" && t.status !== "archived").length === 0 ? (
+              <p className="text-xs text-zinc-600 py-4 text-center">No personal tasks</p>
+            ) : (
+              personalTasks
+                .filter(t => t.status !== "completed" && t.status !== "archived")
+                .map(task => (
+                  <Card key={task.id} className="bg-zinc-900/50 border-zinc-800/50">
+                    <CardContent className="p-3 flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-zinc-300 truncate">{task.title}</p>
+                        <div className="flex gap-2 mt-1">
+                          <Badge variant="outline" className="text-[10px] text-zinc-500 border-zinc-700">
+                            {task.status}
+                          </Badge>
+                          {task.priority && task.priority !== "medium" && (
+                            <Badge variant="outline" className={`text-[10px] ${
+                              task.priority === "critical" ? "text-red-400 border-red-500/50" :
+                              task.priority === "high" ? "text-orange-400 border-orange-500/50" :
+                              "text-zinc-500 border-zinc-700"
+                            }`}>
+                              {task.priority}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handlePromoteToAgent(task.id)}
+                        className="text-zinc-500 hover:text-orange-400 ml-2 shrink-0"
+                        title="Move to agent board"
+                      >
+                        <ArrowUpRight className="w-4 h-4" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))
+            )}
+          </div>
+        )}
       </div>
 
       <TaskModal
