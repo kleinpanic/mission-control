@@ -71,10 +71,10 @@ app.prepare().then(() => {
               minProtocol: 3,
               maxProtocol: 3,
               client: {
-                id: "mission-control-proxy",
+                id: "cli",
                 version: "1.2.0",
                 platform: "node",
-                mode: "proxy"
+                mode: "operator"
               },
               role: "operator",
               scopes: ["operator.admin"],
