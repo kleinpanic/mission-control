@@ -24,6 +24,7 @@ import { useRealtimeStore } from "@/stores/realtime";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { AgentActivity } from "@/components/dashboard/AgentActivity";
+import { TaskmasterWidget } from "@/components/dashboard/TaskmasterWidget";
 import { getAgentName } from "@/lib/agentNames";
 
 interface AgentInfo {
@@ -430,6 +431,11 @@ export default function Dashboard() {
             <p className="text-xs text-zinc-500">Agent: {getAgentName(nextHeartbeat?.agentId || "main")}</p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* System Status Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <TaskmasterWidget />
       </div>
 
       {/* Agents Grid */}
