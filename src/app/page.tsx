@@ -35,6 +35,7 @@ interface AgentInfo {
   enabled: boolean;
   status: "active" | "idle" | "waiting" | "error";
   model: string | null;
+  authMode: string; // "oauth" | "api" | "token" | "local" | "unknown"
   heartbeatInterval: string;
   lastActivity: string | null;
   lastActivityAge: string;
@@ -130,6 +131,7 @@ export default function Dashboard() {
             enabled: agent.enabled !== false,
             status: agent.status || "idle",
             model: agent.model || null,
+            authMode: agent.authMode || "unknown",
             heartbeatInterval: agent.heartbeatInterval || "—",
             lastActivity: agent.lastActivity || null,
             lastActivityAge: formatAge(agent.lastActivity),
@@ -473,8 +475,19 @@ export default function Dashboard() {
                       {agent.cooldowns
                         .filter((c: any) => c.active)
                         .map((cooldown: any, idx: number) => (
-                          <div key={idx} className="flex items-center justify-between text-xs">
-                            <span className="text-zinc-400 font-mono">{cooldown.provider}</span>
+                          <div key={idx} className="flex items-center justify-between text-xs gap-2">
+                            <div className="flex items-center gap-1">
+                              <span className="text-zinc-400 font-mono">{cooldown.provider}</span>
+                              {cooldown.authMode && cooldown.authMode !== 'unknown' && (
+                                <span className={cn("text-[9px] px-1 rounded",
+                                  cooldown.authMode === 'oauth' ? 'bg-emerald-500/20 text-emerald-400' :
+                                  cooldown.authMode === 'api' || cooldown.authMode === 'token' ? 'bg-amber-500/20 text-amber-400' :
+                                  'bg-zinc-500/20 text-zinc-400'
+                                )}>
+                                  {cooldown.authMode === 'oauth' ? 'OAuth' : 'API'}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-amber-400">{cooldown.remainingHuman}</span>
                           </div>
                         ))}
@@ -516,11 +529,24 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-zinc-400">Model:</span>
-                    <span className="text-zinc-200 font-mono text-xs truncate max-w-[150px]">
-                      {agent.model || "default"}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Badge className={cn("text-[9px] px-1 py-0",
+                        agent.authMode === "oauth" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
+                        agent.authMode === "api" || agent.authMode === "token" ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
+                        agent.authMode === "local" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
+                        "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
+                      )}>
+                        {agent.authMode === "oauth" ? "OAuth" :
+                         agent.authMode === "api" ? "API" :
+                         agent.authMode === "token" ? "API" :
+                         agent.authMode === "local" ? "Local" : "?"}
+                      </Badge>
+                      <span className="text-zinc-200 font-mono text-xs truncate max-w-[130px]">
+                        {agent.model || "default"}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Last Activity:</span>
