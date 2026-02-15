@@ -18,6 +18,7 @@ import {
   Activity,
   AlertCircle,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { useGateway } from "@/providers/GatewayProvider";
 import { useRealtimeStore } from "@/stores/realtime";
@@ -88,6 +89,7 @@ export default function Dashboard() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [costs, setCosts] = useState<CostData | null>(null);
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
+  const [taskStats, setTaskStats] = useState<{ today: number; week: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
 
@@ -101,7 +103,7 @@ export default function Dashboard() {
     try {
       // Fetch all data in parallel
       // Note: Prefer HTTP endpoints to avoid WebSocket pairing issues
-      const [agentsResult, statusResult, costsResult, cronResult, channelsResult] = await Promise.all([
+      const [agentsResult, statusResult, costsResult, cronResult, channelsResult, tasksResult] = await Promise.all([
         // Try WebSocket first, fall back to HTTP API
         (connected ? request<any>("agents.list").catch(() => null) : Promise.resolve(null))
           .then(ws => ws || fetch("/api/agents").then(r => r.json()).catch(e => { console.error("agents API error:", e); return null; })),
@@ -110,6 +112,7 @@ export default function Dashboard() {
         (connected ? request<any>("cron.list").catch(() => null) : Promise.resolve(null))
           .then(ws => ws || fetch("/api/cron").then(r => r.json()).catch(e => { console.error("cron API error:", e); return null; })),
         fetch("/api/channels").then(r => r.json()).catch(e => { console.error("channels API error:", e); return null; }),
+        fetch("/api/tasks?status=done,review").then(r => r.json()).catch(e => { console.error("tasks API error:", e); return null; }),
       ]);
       
       if (agentsResult || statusResult) {
@@ -210,6 +213,23 @@ export default function Dashboard() {
 
       if (cronResult) {
         setCronJobs(cronResult.jobs || cronResult || []);
+      }
+
+      // Calculate task stats
+      if (tasksResult?.tasks) {
+        const now = Date.now();
+        const oneDayAgo = now - (24 * 60 * 60 * 1000);
+        const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+        
+        const completedTasks = tasksResult.tasks.filter((t: any) => t.status === 'done' && t.completedAt);
+        const tasksToday = completedTasks.filter((t: any) => new Date(t.completedAt).getTime() > oneDayAgo);
+        const tasksWeek = completedTasks.filter((t: any) => new Date(t.completedAt).getTime() > oneWeekAgo);
+        
+        setTaskStats({
+          today: tasksToday.length,
+          week: tasksWeek.length,
+          total: completedTasks.length,
+        });
       }
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
@@ -373,7 +393,7 @@ export default function Dashboard() {
       </div>
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-zinc-300">Agents</CardTitle>
@@ -403,6 +423,19 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold text-zinc-100">{status?.sessions.total || 0}</div>
             <p className="text-xs text-zinc-500">Active conversations</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-zinc-300">Tasks Completed Today</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-zinc-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-zinc-100">{taskStats?.today || 0}</div>
+            <p className="text-xs text-zinc-500">
+              Week: {taskStats?.week || 0} • Total: {taskStats?.total || 0}
+            </p>
           </CardContent>
         </Card>
 
