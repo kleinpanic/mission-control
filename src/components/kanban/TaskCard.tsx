@@ -182,6 +182,29 @@ export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDe
               {task.assignedTo}
             </Badge>
           )}
+          {task.recommendedModel && (
+            <Badge
+              className={cn(
+                "text-[10px] px-1 py-0 h-4",
+                task.recommendedModel.includes("flash")
+                  ? "bg-emerald-700/60 text-emerald-200"
+                  : task.recommendedModel.includes("sonnet")
+                  ? "bg-yellow-700/60 text-yellow-200"
+                  : task.recommendedModel.includes("opus")
+                  ? "bg-red-700/60 text-red-200"
+                  : "bg-zinc-700/60 text-zinc-300"
+              )}
+              title={`Recommended: ${task.recommendedModel}`}
+            >
+              {task.recommendedModel.includes("flash")
+                ? "⚡ flash"
+                : task.recommendedModel.includes("sonnet")
+                ? "🎯 sonnet"
+                : task.recommendedModel.includes("opus")
+                ? "💎 opus"
+                : "🤖 model"}
+            </Badge>
+          )}
           {task.type === "auto" && (
             <Badge className="text-[10px] px-1 py-0 h-4 bg-purple-700/60 text-purple-200">auto</Badge>
           )}
