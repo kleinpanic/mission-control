@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createTask, getTasks, updateTask, deleteTask } from '@/lib/db';
 import { TaskStatus, TaskPriority, TaskType } from '@/types';
+import { logTaskActivity } from '@/lib/taskActivity';
 
 export async function GET(request: NextRequest) {
   try {
@@ -94,6 +95,17 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // Get old task for activity logging
+    const oldTasks = getTasks({ status: undefined as any });
+    const oldTask = oldTasks.find(t => t.id === id);
+    
+    if (!oldTask) {
+      return NextResponse.json(
+        { error: 'Task not found' },
+        { status: 404 }
+      );
+    }
+
     const task = updateTask(id, updates);
 
     if (!task) {
@@ -101,6 +113,20 @@ export async function PATCH(request: NextRequest) {
         { error: 'Task not found' },
         { status: 404 }
       );
+    }
+
+    // Log significant changes to activity table (sync with oc-tasks)
+    if (updates.status && updates.status !== oldTask.status) {
+      logTaskActivity(id, 'moved', 'ui', oldTask.status, updates.status);
+    }
+    if (updates.assignedTo !== undefined && updates.assignedTo !== oldTask.assignedTo) {
+      logTaskActivity(id, 'assigned', 'ui', oldTask.assignedTo, updates.assignedTo);
+    }
+    if (updates.priority && updates.priority !== oldTask.priority) {
+      logTaskActivity(id, 'updated', 'ui', oldTask.priority, updates.priority);
+    }
+    if (updates.title && updates.title !== oldTask.title) {
+      logTaskActivity(id, 'updated', 'ui', oldTask.title, updates.title);
     }
 
     return NextResponse.json({ task });

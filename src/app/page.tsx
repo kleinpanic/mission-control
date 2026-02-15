@@ -100,27 +100,30 @@ export default function Dashboard() {
     setLoading(true);
     try {
       // Fetch all data in parallel
-      // Note: costs and channels via HTTP endpoints (more reliable), rest via WebSocket
+      // Note: Prefer HTTP endpoints to avoid WebSocket pairing issues
       const [agentsResult, statusResult, costsResult, cronResult, channelsResult] = await Promise.all([
-        request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
-        request<any>("status").catch(e => { console.error("status error:", e); return null; }),
+        // Try WebSocket first, fall back to HTTP API
+        (connected ? request<any>("agents.list").catch(() => null) : Promise.resolve(null))
+          .then(ws => ws || fetch("/api/agents").then(r => r.json()).catch(e => { console.error("agents API error:", e); return null; })),
+        fetch("/api/status").then(r => r.json()).catch(e => { console.error("status API error:", e); return null; }),
         fetch("/api/costs").then(r => r.json()).catch(e => { console.error("costs API error:", e); return null; }),
-        request<any>("cron.list").catch(e => { console.error("cron.list error:", e); return null; }),
+        (connected ? request<any>("cron.list").catch(() => null) : Promise.resolve(null))
+          .then(ws => ws || fetch("/api/cron").then(r => r.json()).catch(e => { console.error("cron API error:", e); return null; })),
         fetch("/api/channels").then(r => r.json()).catch(e => { console.error("channels API error:", e); return null; }),
       ]);
       
-      if (agentsResult && statusResult) {
-        // Build a map of agent sessions from status
+      if (agentsResult || statusResult) {
+        // Build a map of agent sessions from status (if available)
         const sessionsByAgent = new Map<string, any[]>();
         const heartbeatByAgent = new Map<string, any>();
         
-        // Map sessions by agent
-        statusResult.sessions?.byAgent?.forEach((agentSessions: any) => {
+        // Map sessions by agent (defensive: handle missing statusResult)
+        statusResult?.sessions?.byAgent?.forEach((agentSessions: any) => {
           sessionsByAgent.set(agentSessions.agentId, agentSessions.recent || []);
         });
         
         // Map heartbeat info by agent
-        statusResult.heartbeat?.agents?.forEach((hb: any) => {
+        statusResult?.heartbeat?.agents?.forEach((hb: any) => {
           heartbeatByAgent.set(hb.agentId, hb);
         });
         
