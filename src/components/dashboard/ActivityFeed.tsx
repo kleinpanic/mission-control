@@ -5,6 +5,7 @@ import { Event } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getAgentName } from "@/lib/agentNames";
 import {
   Play,
   CheckCircle,
@@ -281,15 +282,18 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-zinc-100">
-                        {event.agentId || "System"}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-zinc-100">
+                        {event.agentId ? getAgentName(event.agentId) : "System"}
                       </span>
+                      {event.agentId && (
+                        <span className="text-xs text-zinc-500 font-mono">({event.agentId})</span>
+                      )}
                       <Badge variant="secondary" className="text-xs bg-zinc-700 text-zinc-300">
                         {config.label}
                       </Badge>
                     </div>
-                    <p className="text-sm text-zinc-400 truncate">
+                    <p className="text-sm text-zinc-400 truncate mt-0.5">
                       {getEventDescription(event)}
                     </p>
                   </div>

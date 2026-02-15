@@ -9,18 +9,25 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, Bot, Play, Pause, ArrowRight, RotateCcw, CheckCircle, Archive } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Bot, Play, Pause, ArrowRight, RotateCcw, CheckCircle, Archive, Send, GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TaskCardProps {
   task: Task;
   columnStatus: TaskStatus;
+  agents?: { id: string; name: string }[];
   onDragStart: (e: React.DragEvent) => void;
   onEdit: () => void;
   onDelete: () => void;
   onMoveTask?: (id: string, status: TaskStatus) => void;
+  onDispatchTask?: (taskId: string, agentId: string) => void;
+  onDecompose?: () => void;
+  onPause?: (taskId: string) => void;
 }
 
 const priorityColors: Record<string, string> = {
@@ -29,6 +36,21 @@ const priorityColors: Record<string, string> = {
   high: "bg-red-700/80 text-red-100",
   critical: "bg-red-900 text-red-100",
 };
+
+function formatRelativeTime(timestamp: string): string {
+  const now = Date.now();
+  const then = new Date(timestamp).getTime();
+  const diff = now - then;
+  
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return "just now";
+}
 
 // Quick actions per column status
 function getQuickActions(status: TaskStatus): { label: string; target: TaskStatus; icon: typeof Play }[] {
@@ -69,15 +91,21 @@ function getQuickActions(status: TaskStatus): { label: string; target: TaskStatu
   }
 }
 
-export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, onMoveTask }: TaskCardProps) {
+export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDelete, onMoveTask, onDispatchTask, onDecompose, onPause }: TaskCardProps) {
   const priority = priorityColors[task.priority] || priorityColors.medium;
   const quickActions = getQuickActions(columnStatus);
+  const canDispatch = agents && agents.length > 0 && onDispatchTask && ["ready", "intake", "backlog"].includes(columnStatus);
+  const isReviewColumn = columnStatus === "review";
 
   return (
     <Card
-      className="bg-zinc-800 border-zinc-700 cursor-grab active:cursor-grabbing hover:border-zinc-600 transition-colors"
+      className={cn(
+        "bg-zinc-800 border-zinc-700 cursor-grab active:cursor-grabbing hover:border-zinc-600 transition-colors",
+        isReviewColumn && "cursor-pointer"
+      )}
       draggable
       onDragStart={onDragStart}
+      onClick={isReviewColumn ? onEdit : undefined}
     >
       <CardContent className="p-2.5 space-y-1.5">
         {/* Title & Menu */}
@@ -99,6 +127,35 @@ export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, on
               <DropdownMenuItem onClick={onEdit} className="text-zinc-300 focus:bg-zinc-700 text-xs">
                 <Pencil className="w-3 h-3 mr-2" /> Edit
               </DropdownMenuItem>
+              
+              {/* Decompose Task - only for incomplete tasks */}
+              {onDecompose && !["completed", "archived"].includes(task.status) && (
+                <DropdownMenuItem onClick={onDecompose} className="text-zinc-300 focus:bg-zinc-700 text-xs">
+                  <GitBranch className="w-3 h-3 mr-2" /> Decompose
+                </DropdownMenuItem>
+              )}
+              
+              {/* Dispatch to Agent submenu */}
+              {canDispatch && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="text-zinc-300 focus:bg-zinc-700 text-xs">
+                    <Send className="w-3 h-3 mr-2" /> Dispatch to Agent
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="bg-zinc-800 border-zinc-700">
+                    {agents.map((agent) => (
+                      <DropdownMenuItem
+                        key={agent.id}
+                        onClick={() => onDispatchTask!(task.id, agent.id)}
+                        className="text-zinc-300 focus:bg-zinc-700 text-xs"
+                      >
+                        <Bot className="w-3 h-3 mr-2" />
+                        {agent.name} ({agent.id})
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+
               {onMoveTask && (
                 <>
                   <DropdownMenuSeparator className="bg-zinc-700" />
@@ -135,6 +192,13 @@ export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, on
           <p className="text-[11px] text-zinc-500 line-clamp-1">{task.description}</p>
         )}
 
+        {/* Timestamp */}
+        {task.createdAt && (
+          <p className="text-[10px] text-zinc-600">
+            Added {formatRelativeTime(task.createdAt)}
+          </p>
+        )}
+
         {/* Compact badges row */}
         <div className="flex items-center gap-1 flex-wrap">
           <Badge className={cn("text-[10px] px-1 py-0 h-4", priority)}>
@@ -146,6 +210,29 @@ export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, on
               {task.assignedTo}
             </Badge>
           )}
+          {task.recommendedModel && (
+            <Badge
+              className={cn(
+                "text-[10px] px-1 py-0 h-4",
+                task.recommendedModel.includes("flash")
+                  ? "bg-emerald-700/60 text-emerald-200"
+                  : task.recommendedModel.includes("sonnet")
+                  ? "bg-yellow-700/60 text-yellow-200"
+                  : task.recommendedModel.includes("opus")
+                  ? "bg-red-700/60 text-red-200"
+                  : "bg-zinc-700/60 text-zinc-300"
+              )}
+              title={`Recommended: ${task.recommendedModel}`}
+            >
+              {task.recommendedModel.includes("flash")
+                ? "⚡ flash"
+                : task.recommendedModel.includes("sonnet")
+                ? "🎯 sonnet"
+                : task.recommendedModel.includes("opus")
+                ? "💎 opus"
+                : "🤖 model"}
+            </Badge>
+          )}
           {task.type === "auto" && (
             <Badge className="text-[10px] px-1 py-0 h-4 bg-purple-700/60 text-purple-200">auto</Badge>
           )}
@@ -155,7 +242,7 @@ export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, on
         {task.tags && task.tags.length > 0 && (
           <div className="flex gap-1 flex-wrap">
             {task.tags
-              .map(tag => tag.replace(/[\[\]"]/g, '').trim()) // Clean corrupted JSON fragments
+              .map(tag => tag.replace(/[\[\]"]/g, '').trim())
               .filter(tag => tag.length > 0)
               .slice(0, 3)
               .map((tag) => (
@@ -170,25 +257,59 @@ export function TaskCard({ task, columnStatus, onDragStart, onEdit, onDelete, on
         )}
 
         {/* Quick action buttons */}
-        {quickActions.length > 0 && onMoveTask && (
-          <div className="flex gap-1 pt-0.5">
-            {quickActions.map((action) => (
-              <Button
-                key={action.target}
-                variant="secondary"
-                size="sm"
-                className="h-5 text-[10px] px-1.5 bg-zinc-700/50 hover:bg-zinc-600 text-zinc-300"
-                onClick={(e) => {
-                  e.stopPropagation();
+        <div className="flex gap-1 pt-0.5">
+          {quickActions.length > 0 && onMoveTask && quickActions.map((action) => (
+            <Button
+              key={action.target}
+              variant="secondary"
+              size="sm"
+              className="h-5 text-[10px] px-1.5 bg-zinc-700/50 hover:bg-zinc-600 text-zinc-300"
+              onClick={(e) => {
+                e.stopPropagation();
+                // Use special pause handler if available and action is pause
+                if (action.target === "paused" && onPause) {
+                  onPause(task.id);
+                } else {
                   onMoveTask(task.id, action.target);
-                }}
-              >
-                <action.icon className="w-2.5 h-2.5 mr-0.5" />
-                {action.label}
-              </Button>
-            ))}
-          </div>
-        )}
+                }
+              }}
+            >
+              <action.icon className="w-2.5 h-2.5 mr-0.5" />
+              {action.label}
+            </Button>
+          ))}
+          {/* Dispatch button for ready tasks */}
+          {canDispatch && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-5 text-[10px] px-1.5 bg-orange-700/50 hover:bg-orange-600 text-orange-200"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Send className="w-2.5 h-2.5 mr-0.5" />
+                  Dispatch
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="bg-zinc-800 border-zinc-700">
+                {agents.map((agent) => (
+                  <DropdownMenuItem
+                    key={agent.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDispatchTask!(task.id, agent.id);
+                    }}
+                    className="text-zinc-300 focus:bg-zinc-700 text-xs"
+                  >
+                    <Bot className="w-3 h-3 mr-2" />
+                    {agent.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

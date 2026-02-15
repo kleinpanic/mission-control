@@ -63,6 +63,16 @@
 - Dev server: `PORT=3333 npm run dev`
 - Build check: `npm run build`
 
+**Round 4 (Security + Dynamic + Kanban Dispatch):** ✅ Complete (2026-02-14)
+- Security: Remove NEXT_PUBLIC token, server-side auth proxy, MC password support
+- Dynamic agents: Remove hardcoded 6-agent list, fully dynamic from gateway
+- Heartbeat fix: Proper field mapping from heartbeat.next + heartbeat.agents
+- Token usage: Accurate context % with model-specific fallbacks
+- Kanban dispatch: /api/tasks/dispatch endpoint, dispatch UI on task cards
+- Agent submenu in dropdown, dynamic agent list in TaskModal
+- Auto-refresh (30s) + Sync button for external DB changes
+- Tests updated and passing (21/21)
+
 ## Next Steps (Future)
 - [x] Add compact/prune automation policies (CompactionPolicies component - auto-compact threshold, stale pruning, protected agents)
 - [x] Add session compaction scheduling (integrated into CompactionPolicies with batch Run Now)

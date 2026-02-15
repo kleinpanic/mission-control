@@ -198,7 +198,21 @@ export function AgentCard({ agent }: AgentCardProps) {
                   {status.label}
                 </Badge>
                 {agent.model && (
-                  <span className="text-xs text-zinc-500">{(agent.model || "").split("/").pop()}</span>
+                  <span className="text-xs text-zinc-500 flex items-center gap-1">
+                    {agent.authMode && agent.authMode !== "unknown" && (
+                      <span className={cn("text-[9px] px-1 rounded font-medium",
+                        agent.authMode === "oauth" ? "bg-emerald-500/20 text-emerald-400" :
+                        agent.authMode === "api" || agent.authMode === "token" ? "bg-amber-500/20 text-amber-400" :
+                        agent.authMode === "local" ? "bg-blue-500/20 text-blue-400" :
+                        "bg-zinc-500/20 text-zinc-400"
+                      )}>
+                        {agent.authMode === "oauth" ? "OAuth" :
+                         agent.authMode === "api" || agent.authMode === "token" ? "API" :
+                         agent.authMode === "local" ? "Local" : agent.authMode}
+                      </span>
+                    )}
+                    {(agent.model || "").split("/").pop()}
+                  </span>
                 )}
               </div>
             </div>
