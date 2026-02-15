@@ -213,6 +213,37 @@ export default function KanbanPage() {
     await handleMoveTask(taskId, "archived");
   };
 
+  const handlePauseTask = async (taskId: string) => {
+    try {
+      const res = await fetch("/api/tasks/pause", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId }),
+      });
+      const data = await res.json();
+      
+      if (!res.ok) {
+        toast.error(data.error || "Failed to pause task");
+        return;
+      }
+      
+      if (data.task) {
+        updateTask(taskId, data.task);
+      }
+      
+      if (data.autonomousSessionStopped) {
+        toast.success(data.message, {
+          description: "Autonomous session stopped successfully.",
+        });
+      } else {
+        toast.success("Task paused");
+      }
+    } catch (error) {
+      console.error("Failed to pause task:", error);
+      toast.error("Failed to pause task");
+    }
+  };
+
   const readyCount = tasks.filter(t => t.status === "ready").length;
   const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
   const reviewCount = tasks.filter(t => t.status === "review").length;
@@ -292,6 +323,7 @@ export default function KanbanPage() {
           onRejectTask={handleRejectTask}
           onDispatchTask={handleDispatchTask}
           onDecomposeTask={setDecomposeTask}
+          onPauseTask={handlePauseTask}
         />
       </div>
 

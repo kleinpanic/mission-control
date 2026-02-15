@@ -27,6 +27,7 @@ interface TaskCardProps {
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onDispatchTask?: (taskId: string, agentId: string) => void;
   onDecompose?: () => void;
+  onPause?: (taskId: string) => void;
 }
 
 const priorityColors: Record<string, string> = {
@@ -90,7 +91,7 @@ function getQuickActions(status: TaskStatus): { label: string; target: TaskStatu
   }
 }
 
-export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDelete, onMoveTask, onDispatchTask, onDecompose }: TaskCardProps) {
+export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDelete, onMoveTask, onDispatchTask, onDecompose, onPause }: TaskCardProps) {
   const priority = priorityColors[task.priority] || priorityColors.medium;
   const quickActions = getQuickActions(columnStatus);
   const canDispatch = agents && agents.length > 0 && onDispatchTask && ["ready", "intake", "backlog"].includes(columnStatus);
@@ -265,7 +266,12 @@ export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDe
               className="h-5 text-[10px] px-1.5 bg-zinc-700/50 hover:bg-zinc-600 text-zinc-300"
               onClick={(e) => {
                 e.stopPropagation();
-                onMoveTask(task.id, action.target);
+                // Use special pause handler if available and action is pause
+                if (action.target === "paused" && onPause) {
+                  onPause(task.id);
+                } else {
+                  onMoveTask(task.id, action.target);
+                }
               }}
             >
               <action.icon className="w-2.5 h-2.5 mr-0.5" />
