@@ -78,7 +78,7 @@ export function GatewayProvider({ children }: Props) {
               mode: "webchat"
             },
             role: "operator",
-            scopes: ["operator.admin"],
+            scopes: ["operator.admin", "operator.read"],
             auth: {
               // MC password for server proxy auth (proxy injects real gateway token)
               ...(mcPassword ? { mcPassword } : {}),

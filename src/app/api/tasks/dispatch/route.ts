@@ -83,6 +83,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // GUARD: Personal tasks cannot be auto-dispatched to agents
+    // Klein must explicitly move them to 'agents' list first
+    if ((task as any).list === 'personal') {
+      return NextResponse.json(
+        { error: `Task "${task.title}" is in Klein's personal list. Personal tasks cannot be dispatched to agents. Move it to the 'agents' list first if you want an agent to work on it.` },
+        { status: 403 }
+      );
+    }
+
     // 2. Update task: assign to agent, move to in_progress
     const updatedTask = updateTask(taskId, {
       status: 'in_progress',
