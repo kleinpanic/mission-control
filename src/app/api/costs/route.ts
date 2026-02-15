@@ -59,18 +59,15 @@ export async function GET(_request: NextRequest) {
     let todayCost = 0;
     let monthCost = 0;
     try {
-      const { stdout: textOutput, stderr: textStderr } = await execAsync(
+      const { stdout: textOutput } = await execAsync(
         '/home/broklein/.local/bin/codexbar cost',
         { timeout: 5000, env: { ...process.env, HOME: '/home/broklein' } }
       );
-      console.log('codexbar text output:', textOutput);
-      if (textStderr) console.warn('codexbar stderr:', textStderr);
       // Parse "Today: $9.08 · 37M tokens" and "Last 30 days: $41.97 · 169M tokens"
       const todayMatch = textOutput.match(/Today:\s*\$([0-9.]+)/);
       if (todayMatch) todayCost = parseFloat(todayMatch[1]);
       const monthMatch = textOutput.match(/Last 30 days:\s*\$([0-9.]+)/);
       if (monthMatch) monthCost = parseFloat(monthMatch[1]);
-      console.log('Parsed costs:', { todayCost, monthCost });
     } catch (textError) {
       console.warn('Failed to fetch cost from text output:', textError);
     }
