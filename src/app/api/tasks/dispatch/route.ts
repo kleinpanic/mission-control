@@ -2,6 +2,7 @@
 // Sends a task to an agent via the OpenClaw gateway and optionally notifies Slack
 import { NextRequest, NextResponse } from 'next/server';
 import { getTask, updateTask } from '@/lib/db';
+import { logTaskActivity } from '@/lib/taskActivity';
 
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:18789';
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
@@ -83,6 +84,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Log dispatch activity
+    logTaskActivity(taskId, 'dispatched', 'ui', task.status, `in_progress (${agentId})`);
 
     // 3. Build the task message for the agent
     const priorityEmoji = {
