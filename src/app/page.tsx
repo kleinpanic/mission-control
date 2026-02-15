@@ -24,6 +24,7 @@ import { useRealtimeStore } from "@/stores/realtime";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { AgentActivity } from "@/components/dashboard/AgentActivity";
+import { getAgentName } from "@/lib/agentNames";
 
 interface AgentInfo {
   id: string;
@@ -152,7 +153,7 @@ export default function Dashboard() {
           
           return {
             id: agent.id,
-            name: agent.name || agent.id,
+            name: agent.name || getAgentName(agent.id),
             enabled: heartbeat?.enabled ?? true,
             status,
             model: mostRecentSession?.model || null,
@@ -426,7 +427,7 @@ export default function Dashboard() {
             <div className="text-2xl font-bold text-zinc-100">
               {nextHeartbeat?.nextIn || "~15m"}
             </div>
-            <p className="text-xs text-zinc-500">Agent: {nextHeartbeat?.agentId || "main"}</p>
+            <p className="text-xs text-zinc-500">Agent: {getAgentName(nextHeartbeat?.agentId || "main")}</p>
           </CardContent>
         </Card>
       </div>
