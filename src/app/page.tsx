@@ -97,12 +97,14 @@ export default function Dashboard() {
     
     setLoading(true);
     try {
-      // Fetch all data in parallel via WebSocket
-      const [agentsResult, statusResult, costsResult, cronResult] = await Promise.all([
+      // Fetch all data in parallel
+      // Note: costs and channels via HTTP endpoints (more reliable), rest via WebSocket
+      const [agentsResult, statusResult, costsResult, cronResult, channelsResult] = await Promise.all([
         request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
         request<any>("status").catch(e => { console.error("status error:", e); return null; }),
-        request<any>("usage.cost").catch(e => { console.error("usage.cost error:", e); return null; }),
+        fetch("/api/costs").then(r => r.json()).catch(e => { console.error("costs API error:", e); return null; }),
         request<any>("cron.list").catch(e => { console.error("cron.list error:", e); return null; }),
+        fetch("/api/channels").then(r => r.json()).catch(e => { console.error("channels API error:", e); return null; }),
       ]);
       
       if (agentsResult && statusResult) {
@@ -183,7 +185,7 @@ export default function Dashboard() {
             defaultAgentId: statusResult?.heartbeat?.defaultAgentId || agentsResult?.defaultId || "main",
             nextHeartbeats: statusResult?.heartbeat?.next || [],
           },
-          channels: statusResult?.channelSummary?.channels?.map((c: any) => c.id) || [],
+          channels: channelsResult?.channels?.map((c: any) => c.id) || [],
           health: { status: "ok" },
         });
       }
