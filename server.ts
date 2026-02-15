@@ -18,7 +18,7 @@ config({ path: resolve(process.cwd(), ".env") });
 import { createServer } from "http";
 import next from "next";
 import { WebSocketServer, WebSocket } from "ws";
-import { handleSlackMessage } from "./src/lib/slack-tasks";
+import { handleSlackMessage } from "./src/lib/slack-tasks-debug";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT || process.env.MISSION_CONTROL_PORT || "3333", 10);
