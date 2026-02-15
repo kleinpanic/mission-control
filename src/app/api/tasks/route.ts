@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
     if (assignedTo) filters.assignedTo = assignedTo;
     if (type) filters.type = type;
     if (priority) filters.priority = priority;
-    if (list) filters.list = list;
+    if (list) {
+      const lists = list.split(',');
+      filters.list = lists.length === 1 ? lists[0] : lists;
+    }
     if (tag) filters.tag = tag;
     if (backburnered !== null) filters.backburnered = backburnered === 'true';
     if (sort) filters.sort = sort;

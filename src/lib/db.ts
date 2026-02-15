@@ -103,7 +103,7 @@ export function getTasks(filters?: {
   assignedTo?: string;
   type?: TaskType;
   priority?: TaskPriority;
-  list?: string;
+  list?: string | string[];
   tag?: string;
   backburnered?: boolean;
   sort?: string;
@@ -138,8 +138,13 @@ export function getTasks(filters?: {
   }
 
   if (filters?.list) {
-    query += ' AND list = ?';
-    params.push(filters.list);
+    if (Array.isArray(filters.list)) {
+      query += ` AND list IN (${filters.list.map(() => '?').join(',')})`;
+      params.push(...filters.list);
+    } else {
+      query += ' AND list = ?';
+      params.push(filters.list);
+    }
   }
 
   if (filters?.tag) {
