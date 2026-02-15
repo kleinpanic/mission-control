@@ -34,14 +34,37 @@ export default function AgentsPage() {
   const { connected, request, subscribe } = useGateway();
 
   const fetchAgents = useCallback(async () => {
-    if (!connected) return;
-    
     setLoading(true);
     try {
-      const [agentsResult, statusResult] = await Promise.all([
-        request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
-        request<any>("status").catch(e => { console.error("status error:", e); return null; }),
-      ]);
+      // Try WebSocket first, fall back to HTTP API
+      let agentsResult = null;
+      let statusResult = null;
+      
+      if (connected) {
+        [agentsResult, statusResult] = await Promise.all([
+          request<any>("agents.list").catch(e => { console.error("agents.list WS error:", e); return null; }),
+          request<any>("status").catch(e => { console.error("status WS error:", e); return null; }),
+        ]);
+      }
+      
+      // Fallback to HTTP APIs if WebSocket failed
+      if (!agentsResult) {
+        try {
+          const res = await fetch("/api/agents");
+          agentsResult = await res.json();
+        } catch (e) {
+          console.error("agents HTTP API error:", e);
+        }
+      }
+      
+      if (!statusResult) {
+        try {
+          const res = await fetch("/api/status");
+          statusResult = await res.json();
+        } catch (e) {
+          console.error("status HTTP API error:", e);
+        }
+      }
       
       if (agentsResult || statusResult) {
         // Build maps from status data
@@ -152,9 +175,8 @@ export default function AgentsPage() {
   }, [connected, request]);
 
   useEffect(() => {
-    if (connected) {
-      fetchAgents();
-    }
+    // Fetch on mount and when connection state changes
+    fetchAgents();
   }, [connected, fetchAgents]);
 
   // Subscribe to real-time updates
