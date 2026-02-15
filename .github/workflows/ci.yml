@@ -36,6 +36,8 @@ jobs:
       # Install native build dependencies for better-sqlite3
       - run: sudo apt-get update && sudo apt-get install -y build-essential python3
       - run: pnpm install --frozen-lockfile
+      # Rebuild better-sqlite3 native module (pnpm ignores build scripts by default)
+      - run: pnpm rebuild better-sqlite3
       - run: pnpm test:run
 
   build:
