@@ -93,6 +93,7 @@ export default function Dashboard() {
   const [taskStats, setTaskStats] = useState<{ today: number; week: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
+  const [rateLimits, setRateLimits] = useState<any>(null);
 
   const { connected, connecting, request, subscribe } = useGateway();
   const { events } = useRealtimeStore();
@@ -104,7 +105,7 @@ export default function Dashboard() {
     try {
       // Fetch all data in parallel
       // Note: Prefer HTTP endpoints to avoid WebSocket pairing issues
-      const [agentsResult, statusResult, costsResult, cronResult, channelsResult, tasksResult] = await Promise.all([
+      const [agentsResult, statusResult, costsResult, cronResult, channelsResult, tasksResult, rateLimitsResult] = await Promise.all([
         // Always prefer HTTP /api/agents (enriched with runtime data: sessions, lastActivity, heartbeat)
         // WS agents.list only has config data without runtime enrichment
         fetch("/api/agents").then(r => r.json()).catch(e => { console.error("agents API error:", e); return null; }),
@@ -114,7 +115,11 @@ export default function Dashboard() {
           .then(ws => ws || fetch("/api/cron").then(r => r.json()).catch(e => { console.error("cron API error:", e); return null; })),
         fetch("/api/channels").then(r => r.json()).catch(e => { console.error("channels API error:", e); return null; }),
         fetch("/api/tasks?status=done,review").then(r => r.json()).catch(e => { console.error("tasks API error:", e); return null; }),
+        fetch("/api/rate-limits").then(r => r.json()).catch(e => { console.error("rate-limits API error:", e); return null; }),
       ]);
+      
+      // Update rate limits state
+      if (rateLimitsResult) setRateLimits(rateLimitsResult);
       
       if (agentsResult || statusResult) {
         // Use agents data directly from /api/agents (already enriched with runtime data)
@@ -441,6 +446,45 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <TaskmasterWidget />
       </div>
+
+      {/* Rate Limits */}
+      {rateLimits && rateLimits.summary?.rateLimited > 0 && (
+        <Card className="bg-zinc-900 border-zinc-800 border-l-4 border-l-amber-500">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-zinc-100 flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-400" />
+              Rate Limits Active
+              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                {rateLimits.summary.rateLimited} agent{rateLimits.summary.rateLimited > 1 ? 's' : ''}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {rateLimits.agents
+                .filter((a: any) => a.hasActiveCooldown)
+                .map((agent: any) => (
+                  <div key={agent.agentId} className="bg-zinc-800/50 rounded-lg p-3 border border-amber-500/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold text-zinc-100">{agent.agentName}</span>
+                      <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px]">LIMITED</Badge>
+                    </div>
+                    <div className="space-y-1">
+                      {agent.cooldowns
+                        .filter((c: any) => c.active)
+                        .map((cooldown: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between text-xs">
+                            <span className="text-zinc-400 font-mono">{cooldown.provider}</span>
+                            <span className="text-amber-400">{cooldown.remainingHuman}</span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Agents Grid */}
       <Card className="bg-zinc-900 border-zinc-800">
