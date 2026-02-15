@@ -18,6 +18,7 @@ config({ path: resolve(process.cwd(), ".env") });
 import { createServer } from "http";
 import next from "next";
 import { WebSocketServer, WebSocket } from "ws";
+import { handleSlackMessage } from "./src/lib/slack-tasks";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT || process.env.MISSION_CONTROL_PORT || "3333", 10);
@@ -136,6 +137,16 @@ app.prepare().then(() => {
         gatewayWs.on("message", (data, isBinary) => {
           if (clientWs.readyState === WebSocket.OPEN) {
             clientWs.send(data.toString(), { binary: false });
+          }
+
+          // Slack -> Kanban Integration
+          try {
+            const msg = JSON.parse(data.toString());
+            if (msg.type === "event" && msg.event === "message.channel") {
+              handleSlackMessage(msg.payload);
+            }
+          } catch (e) {
+            // Not JSON or other error, ignore
           }
         });
 

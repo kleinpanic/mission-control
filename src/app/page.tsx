@@ -584,8 +584,8 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Agent Activity & Swarm - TODO: fix sessions data structure */}
-      {/* <AgentActivity sessions={status?.sessions.recent || []} /> */}
+      {/* Agent Activity & Swarm */}
+      <AgentActivity sessions={status?.sessions.recent || []} />
 
       {/* Recent Activity */}
       <Card className="bg-zinc-900 border-zinc-800">
