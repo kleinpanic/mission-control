@@ -19,11 +19,20 @@ export async function GET() {
     }
 
     // Get agents list from OpenClaw CLI
-    const { stdout: statusJson } = await execAsync(
-      'openclaw status --json 2>/dev/null | grep -v "^\\[" | head -500'
+    // Note: Filter out log lines starting with [, then get first valid JSON object
+    const { stdout: rawOutput } = await execAsync(
+      'openclaw status --json 2>/dev/null'
     );
     
-    const status = JSON.parse(statusJson.trim());
+    // Find first line that starts with { (the JSON output)
+    const lines = rawOutput.split('\n');
+    const jsonLine = lines.find(line => line.trim().startsWith('{'));
+    
+    if (!jsonLine) {
+      throw new Error('No JSON output from openclaw status');
+    }
+    
+    const status = JSON.parse(jsonLine.trim());
     
     // Extract agents data
     const agents = status.agents || [];

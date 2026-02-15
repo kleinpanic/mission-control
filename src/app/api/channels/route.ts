@@ -1,35 +1,25 @@
 // Mission Control - Channels API
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { readFile } from 'fs/promises';
+import { homedir } from 'os';
+import { join } from 'path';
 
 export async function GET() {
   try {
-    // Get channels from gateway config
-    const { stdout } = await execAsync(
-      'openclaw config get | jq -r \'.channels | to_entries | map({id: .key, type: .value.type, enabled: (.value.enabled // true)}) | .[]\'',
-      { timeout: 5000 }
-    );
+    // Read config file directly (faster and cleaner than CLI)
+    const configPath = join(homedir(), '.openclaw', 'openclaw.json');
+    const configData = await readFile(configPath, 'utf-8');
+    const config = JSON.parse(configData);
 
-    if (!stdout || stdout.trim() === '') {
-      return NextResponse.json({ channels: [] });
-    }
-
-    // Parse JSON lines
-    const channels = stdout
-      .trim()
-      .split('\n')
-      .filter(line => line.trim())
-      .map(line => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
+    const channelsObj = config.channels || {};
+    
+    // Transform to array format
+    const channels = Object.entries(channelsObj).map(([id, channelConfig]: [string, any]) => ({
+      id,
+      type: channelConfig.type || 'unknown',
+      enabled: channelConfig.enabled ?? true,
+      name: channelConfig.name || id,
+    }));
 
     return NextResponse.json({ channels });
   } catch (error) {
