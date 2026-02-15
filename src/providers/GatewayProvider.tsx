@@ -186,12 +186,13 @@ export function GatewayProvider({ children }: Props) {
         return process.env.NEXT_PUBLIC_OPENCLAW_GATEWAY_URL;
       }
       
+      // Use the standalone WebSocket proxy on port 9999
+      // This bypasses Next.js's HTTP server which has issues with WebSocket upgrades
       if (typeof window !== "undefined") {
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        return `${protocol}//${window.location.host}/api/gateway/ws`;
+        return `ws://${window.location.hostname}:9999`;
       }
       
-      return "ws://127.0.0.1:3333/api/gateway/ws";
+      return "ws://127.0.0.1:9999";
     };
 
     const resolvedUrl = getProxyUrl();
