@@ -128,6 +128,18 @@ export default function SettingsPage() {
             }
           }
           
+          // Also add models from individual agent configs (in case they use a model not in providers list)
+          for (const [, agentModel] of agentConfigs.entries()) {
+            const primary = agentModel?.primary;
+            if (primary && !seenModels.has(primary)) {
+              seenModels.add(primary);
+              availableModels.push({
+                value: primary,
+                label: primary,
+              });
+            }
+          }
+          
           // Extract channels
           let channels: string[] = [];
           if (channelsResult?.channelMeta && Array.isArray(channelsResult.channelMeta) && channelsResult.channelMeta.length > 0) {
@@ -164,10 +176,13 @@ export default function SettingsPage() {
             channels,
           });
           
-          // Initialize model overrides
+          // Initialize model overrides from config (not runtime agents.list)
           const overrides: Record<string, string> = {};
           agents.forEach((a: any) => {
-            overrides[a.id] = a.model || "default";
+            const configModel = agentConfigs.get(a.id);
+            const modelPrimary = configModel?.primary;
+            // Show the config-defined model, or "default" if inheriting from defaults
+            overrides[a.id] = modelPrimary || "default";
           });
           setModelOverrides(overrides);
         }
