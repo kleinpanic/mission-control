@@ -35,6 +35,62 @@
 
 ## Proposed Architecture
 
+### 0. Integration with Existing Autonomous Infrastructure
+
+**Mission Control integrates with existing OpenClaw autonomous hooks, NOT replacing them:**
+
+```
+Mission Control (WebUI + API)
+   ↕ (HTTP)
+oc-tasks CLI (SQLite DB)
+   ↕ (file-based state)
+autonomous-mode-v3.sh (bash hooks)
+   ↕ (spawns sessions)
+Lobster workflows (.lobster files)
+   ↕ (orchestration)
+Agent autonomous sessions
+   ↕ (HTTP callbacks)
+Mission Control API (status updates)
+```
+
+**Key Integration Points:**
+
+1. **Task Pickup:** Mission Control reads from `~/.openclaw/data/tasks.db` (same DB as oc-tasks CLI)
+2. **Work Activation:** Calls `autonomous-mode-v3.sh start <agent> <task>` (existing hook)
+3. **Workflow Orchestration:** Uses Lobster pipelines when task has `.lobsterWorkflow` field
+4. **Progress Updates:** Agent sessions POST to `/api/tasks/:id/status` during work
+5. **Activity Signaling:** Uses `autonomous-activity.sh` for liveness monitoring
+6. **Completion:** `autonomous-mode-v3.sh stop <agent>` when task done
+
+**The "Start Work" Loop (Klein's clarification):**
+
+```
+Mission Control detects ready task
+   ↓
+Calls autonomous-mode-v3.sh start <agent> <task>
+   ↓
+   ┌─────────────────────────────────────┐
+   │ AUTONOMOUS WORK LOOP (complex)      │
+   │                                     │
+   │  1. Hook creates session state      │
+   │  2. Lobster workflow runs (if set)  │
+   │  3. Agent works autonomously        │
+   │  4. Signals activity every 10min    │
+   │  5. POSTs progress to MC API        │
+   │  6. Updates PROGRESS.md in project  │
+   │  7. Commits changes                 │
+   │  8. When done: hook stops session   │
+   └─────────────────────────────────────┘
+   ↓
+Mission Control receives completion POST
+   ↓
+Updates Kanban status → review
+   ↓
+WebUI + Slack show updates
+```
+
+**This is NOT a replacement system** - it's a **monitoring and orchestration layer** on top of existing autonomous infrastructure.
+
 ### 1. Heartbeat Integration (Core Loop)
 
 Every agent heartbeat (30min default) should:
@@ -71,14 +127,30 @@ async function autonomousTaskCheck() {
   // 4. Update task status to in_progress
   await updateTaskStatus(task.id, 'in_progress');
 
-  // 5. Start autonomous work session
-  await sessions_spawn({
-    label: `task-${task.id}:${task.title}`,
-    task: task.description,
-    agentId: getCurrentAgent(),
-    cleanup: 'delete', // Auto-cleanup when done
-    model: getAgentModel()
+  // 5. Start autonomous work session using existing hooks + Lobster
+  // This is itself a complex loop:
+  //   - autonomous-mode-v3.sh activates agent
+  //   - Lobster workflow orchestrates work (if applicable)
+  //   - Agent reports progress to Mission Control API
+  //   - autonomous-mode-v3.sh stops when complete
+  const workflowConfig = {
+    taskId: task.id,
+    taskTitle: task.title,
+    taskDescription: task.description,
+    useLobster: shouldUseLobster(task), // Check if task needs Lobster workflow
+    lobsterPipeline: task.lobsterWorkflow || 'dev-autonomous-task.lobster'
+  };
+
+  await exec({
+    command: `~/.openclaw/hooks/autonomous-mode-v3.sh start ${agentId} "${task.title}" --involvement medium --project-dir ~/codeWS/Projects/${task.project || 'mission-control'}`,
+    background: true
   });
+
+  // Agent's autonomous session will:
+  // 1. Signal activity every 10min
+  // 2. Update task status via Mission Control API
+  // 3. Use Lobster if configured
+  // 4. Stop and report when done
 
   // 6. Post update to Slack + WebUI
   await notifyTaskStarted(task);
@@ -127,7 +199,35 @@ type ActivityMessage =
 GET  /api/agents/activity          // Get all agent statuses
 GET  /api/agents/:id/activity      // Get specific agent status
 POST /api/agents/:id/activity      // Update agent status (from agent itself)
+POST /api/tasks/:id/progress       // Update task progress from autonomous session
+POST /api/tasks/:id/signal         // Signal liveness (heartbeat from work session)
 ```
+
+**Agent Autonomous Session Integration:**
+
+During autonomous work, the agent session periodically calls:
+
+```bash
+# From within autonomous session (every 10min or on progress)
+curl -X POST http://localhost:3333/api/tasks/$TASK_ID/progress \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "in_progress",
+    "progress": 45,
+    "message": "Implemented feature X, running tests",
+    "agentId": "dev"
+  }'
+
+# Liveness signal (prevents "stuck" detection)
+curl -X POST http://localhost:3333/api/tasks/$TASK_ID/signal \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentId": "dev",
+    "activity": "Running test suite"
+  }'
+```
+
+These endpoints update the WebUI in real-time via WebSocket.
 
 **UI Features:**
 - Live status badges (🟢 Working, 🟡 Waiting, 🔴 Blocked, ⚪ Idle)
