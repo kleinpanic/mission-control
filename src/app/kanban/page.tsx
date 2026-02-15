@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useTasksStore } from "@/stores/tasks";
 import { useGateway } from "@/providers/GatewayProvider";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskModal } from "@/components/kanban/TaskModal";
 import { DecomposeModal } from "@/components/kanban/DecomposeModal";
 import { QuickAdd } from "@/components/tasks/QuickAdd";
+import { TaskSearch, TaskFilters } from "@/components/kanban/TaskSearch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, RefreshCw } from "lucide-react";
@@ -21,6 +22,8 @@ export default function KanbanPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<TaskFilters>({});
   const { connected, request } = useGateway();
 
   const fetchTasks = useCallback(async () => {
@@ -65,6 +68,40 @@ export default function KanbanPage() {
     }, 30000);
     return () => clearInterval(interval);
   }, [fetchTasks]);
+
+  // Filter tasks based on search and filters
+  const filteredTasks = useMemo(() => {
+    let filtered = tasks;
+
+    // Apply search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(task =>
+        task.title.toLowerCase().includes(query) ||
+        task.description?.toLowerCase().includes(query) ||
+        task.tags?.some(tag => tag.toLowerCase().includes(query))
+      );
+    }
+
+    // Apply priority filter
+    if (filters.priority) {
+      filtered = filtered.filter(task => task.priority === filters.priority);
+    }
+
+    // Apply assignedTo filter
+    if (filters.assignedTo) {
+      filtered = filtered.filter(task => task.assignedTo === filters.assignedTo);
+    }
+
+    // Apply tags filter
+    if (filters.tags && filters.tags.length > 0) {
+      filtered = filtered.filter(task =>
+        filters.tags!.some(tag => task.tags?.includes(tag))
+      );
+    }
+
+    return filtered;
+  }, [tasks, searchQuery, filters]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -224,6 +261,13 @@ export default function KanbanPage() {
         </div>
       </div>
 
+      {/* Search and Filter */}
+      <TaskSearch
+        onSearch={setSearchQuery}
+        onFilterChange={setFilters}
+        activeFilters={filters}
+      />
+
       {/* Quick Add - Natural Language Task Entry */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
         <h3 className="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
@@ -238,7 +282,7 @@ export default function KanbanPage() {
 
       <div className="flex-1 min-h-0">
         <KanbanBoard
-          tasks={tasks}
+          tasks={filteredTasks}
           loading={loading}
           agents={agents}
           onMoveTask={handleMoveTask}
