@@ -227,5 +227,64 @@ But the primary issue (WebSocket proxy not connecting) is FIXED and VALIDATED.
 
 ---
 
-**Status:** Fix committed, awaiting Klein's testing validation
-**Next:** Klein to test WebSocket connection and verify all pages work
+## Round 5 UI Integration (2026-02-15 17:00)
+
+**Status:** ✅ COMPLETE - Committed and pushed
+
+**Features Implemented:**
+
+1. **Velocity Dashboard Page** (`/velocity`)
+   - Agent throughput metrics with velocity scores
+   - Success rate and average duration per agent
+   - 7-day velocity trends (line chart)
+   - Agent throughput comparison (bar chart)
+   - Top performer highlight card
+   - Manual snapshot button for velocity capture
+   - Responsive design with dark theme
+
+2. **Auto-Decompose Button** (Kanban page)
+   - Scans all tasks for decomposition eligibility (moderate/epic without subtasks)
+   - Confirmation dialog with task list
+   - Batch decomposition via POST /api/tasks/auto-decompose
+   - Automatic board refresh after completion
+   - Clear user feedback with toast notifications
+
+3. **Smart Assign** (TaskModal)
+   - Smart Assign button next to agent dropdown
+   - Calls POST /api/tasks/velocity with action=recommend
+   - Auto-fills assignedTo field with recommended agent
+   - Shows velocity score and success rate in toast
+   - Only available for existing tasks (not create mode)
+
+4. **Decomposition Status Display** (TaskCard)
+   - Subtask badge with Network icon for tasks with parentId
+   - Shows parent task ID on hover
+   - Distinct indigo color scheme
+
+5. **Navigation Updates** (Sidebar)
+   - Added Velocity, Approvals, Evolver links
+   - Proper icons (TrendingUp, CheckCircle, Zap)
+   - All 11 pages accessible from sidebar
+
+**Technical Details:**
+- All features use existing APIs (no new endpoints needed)
+- Build status: ✅ Passing (39 routes compiled)
+- Code: TypeScript/React with shadcn/ui components
+- Charts: Recharts library (already in deps)
+- Toast notifications: Sonner library (already in deps)
+
+**Commits:**
+- `c1fdaea` - feat(ui): add velocity dashboard, auto-decompose, and smart assign
+- Pushed to main (a37bfeb..c1fdaea)
+
+**Testing Required:**
+- [ ] Navigate to /velocity and verify metrics display
+- [ ] Click Auto-Decompose on Kanban, verify scan + decompose flow
+- [ ] Edit task, click Smart Assign, verify recommendation
+- [ ] Verify subtask badge appears on decomposed subtasks
+- [ ] Verify all sidebar links work
+
+---
+
+**Status:** Round 5 complete, ready for testing
+**Next:** Klein to test new features, then identify next priorities

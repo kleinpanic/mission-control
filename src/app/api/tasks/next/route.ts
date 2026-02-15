@@ -59,11 +59,13 @@ export async function GET(request: NextRequest) {
     // Query for next ready task:
     // 1. status = 'ready'
     // 2. assigned to this agent OR unassigned
-    // 3. ordered by priority DESC, createdAt ASC
-    // 4. limit 1
+    // 3. NOT personal list (personal tasks are Klein-only)
+    // 4. ordered by priority DESC, createdAt ASC
+    // 5. limit 1
     const query = `
       SELECT * FROM tasks
       WHERE status = 'ready'
+      AND list != 'personal'
       AND (assignedTo = ? OR assignedTo IS NULL)
       ORDER BY priority DESC, createdAt ASC
       LIMIT 1
