@@ -72,7 +72,7 @@ export function GatewayProvider({ children }: Props) {
             minProtocol: 3,
             maxProtocol: 3,
             client: {
-              id: "mission-control",
+              id: "webchat-ui",
               version: "1.2.0",
               platform: "web",
               mode: "webchat"

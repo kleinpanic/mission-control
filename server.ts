@@ -7,6 +7,14 @@
  * - If no password is set, auth is disabled (local-only use)
  */
 
+import { config } from "dotenv";
+import { resolve } from "path";
+
+// Load .env.local before anything else (tsx doesn't auto-load Next.js env files)
+// override: true ensures .env.local takes precedence over inherited env vars
+config({ path: resolve(process.cwd(), ".env.local"), override: true });
+config({ path: resolve(process.cwd(), ".env") });
+
 import { createServer } from "http";
 import next from "next";
 import { WebSocketServer, WebSocket } from "ws";
