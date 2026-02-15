@@ -55,42 +55,64 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json(cachedCosts);
     }
 
-    // Fetch fresh data from codexbar
-    const { stdout, stderr } = await execAsync(
-      'codexbar cost --format json --provider all --pretty',
-      { timeout: 10000 }
-    );
-
-    if (stderr) {
-      console.warn('codexbar stderr:', stderr);
-    }
-
-    const providers: CodexbarProviderData[] = JSON.parse(stdout);
-    
-    // Also fetch today's cost from text output (aggregated JSON doesn't include today yet)
-    let todayCostFromText = 0;
+    // First, get summary from simple text output (most reliable)
+    let todayCost = 0;
+    let monthCost = 0;
     try {
       const { stdout: textOutput } = await execAsync(
         'codexbar cost',
         { timeout: 5000 }
       );
-      // Parse "Today: $9.08 · 37M tokens" format
+      // Parse "Today: $9.08 · 37M tokens" and "Last 30 days: $41.97 · 169M tokens"
       const todayMatch = textOutput.match(/Today:\s*\$([0-9.]+)/);
-      if (todayMatch) {
-        todayCostFromText = parseFloat(todayMatch[1]);
-      }
+      if (todayMatch) todayCost = parseFloat(todayMatch[1]);
+      const monthMatch = textOutput.match(/Last 30 days:\s*\$([0-9.]+)/);
+      if (monthMatch) monthCost = parseFloat(monthMatch[1]);
     } catch (textError) {
-      console.warn('Failed to fetch today cost from text output:', textError);
+      console.warn('Failed to fetch cost from text output:', textError);
     }
 
-    // Aggregate costs
+    // Try to get detailed JSON data (may fail for some providers)
+    let providers: CodexbarProviderData[] = [];
+    try {
+      const { stdout, stderr } = await execAsync(
+        'codexbar cost --format json --provider all --pretty 2>/dev/null || codexbar cost --format json --pretty 2>/dev/null || echo "[]"',
+        { timeout: 10000, shell: '/bin/bash' }
+      );
+      if (stdout.trim() && stdout.trim() !== '[]') {
+        providers = JSON.parse(stdout);
+      }
+    } catch (jsonError) {
+      console.warn('Failed to fetch JSON cost data, using text summary only');
+    }
+    
+    const todayCostFromText = todayCost;
+
+    // Aggregate costs - start with text-parsed values as base
     const summary = {
-      today: 0,
+      today: todayCost,
       week: 0,
-      month: 0,
+      month: monthCost,
       byProvider: {} as Record<string, number>,
       byModel: {} as Record<string, number>,
     };
+
+    // If no JSON providers, return text-based summary
+    if (providers.length === 0) {
+      const result = {
+        summary: {
+          today: Math.round(todayCost * 100) / 100,
+          week: Math.round(monthCost / 4 * 100) / 100, // Estimate week as month/4
+          month: Math.round(monthCost * 100) / 100,
+          byProvider: { codex: Math.round(monthCost * 100) / 100 },
+          byModel: {},
+        },
+        raw: [],
+      };
+      cachedCosts = result;
+      cacheTimestamp = now;
+      return NextResponse.json(result);
+    }
 
     const now_date = new Date();
     // Use local date for "today" comparison (not UTC) to match user's timezone
