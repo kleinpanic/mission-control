@@ -44,15 +44,29 @@
 ## Phase 2: Feature 2 - Task Decomposition System
 
 ### Tasks
-- [ ] Add decomposition UI to Mission Control Kanban page
-- [ ] Create `/api/tasks/decompose` endpoint
-- [ ] Implement LLM-powered task breakdown (use configured model)
-- [ ] Add preview/approve workflow in UI
-- [ ] Update task creation to support `parentId` field
-- [ ] Browser test decomposition flow
+- [x] Create `/api/tasks/decompose` endpoint
+- [x] Implement LLM-powered task breakdown (uses gateway/configured model)
+- [x] Create DecomposeModal component with preview/approve workflow
+- [x] JSON parsing (handles markdown code blocks from LLM)
+- [x] Build succeeds (28 routes including /api/tasks/decompose)
+- [ ] Wire decompose button into Kanban TaskCard dropdown
+- [ ] Test decomposition flow via browser
+- [ ] Verify subtasks created with `parentId` link
 
 ### Status
-Starting after browser validation of Phase 1...
+**Backend Complete** - API endpoint functional, UI component ready
+
+**Completed:**
+- ✅ `/api/tasks/decompose` route - POST endpoint for task decomposition
+- ✅ LLM integration via gateway (`gemini-3-flash-preview` default)
+- ✅ DecomposeModal component with reasoning display + subtask preview
+- ✅ Approve/regenerate workflow
+- ✅ Creates subtasks with `parentId` field linking to parent task
+
+**Commits:**
+- `1b476e7` - Task Decomposition API and UI
+
+**Next:** Integrate decompose trigger into Kanban UI + browser validation
 
 ## Phase 3: Feature 3 - Issue Discovery Mode
 
