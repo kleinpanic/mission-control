@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Task, TaskStatus } from "@/types";
 import { TaskCard } from "./TaskCard";
 import { IntakeApprovalCard } from "./IntakeApprovalCard";
@@ -45,12 +45,25 @@ export function KanbanColumn({
   onDecomposeTask,
 }: KanbanColumnProps) {
   const [showInfo, setShowInfo] = useState(false);
+  const [tooltipOnRight, setTooltipOnRight] = useState(false);
+  const columnRef = useRef<HTMLDivElement>(null);
   const isIntakeColumn = status === "intake";
   // Only show dispatch on ready/intake/backlog columns
   const canDispatch = ["ready", "intake", "backlog"].includes(status) && onDispatchTask && agents && agents.length > 0;
 
+  // Detect column position for smart tooltip positioning
+  useEffect(() => {
+    if (columnRef.current) {
+      const rect = columnRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      // If column is past 60% of screen width, position tooltip on right
+      setTooltipOnRight(rect.left > viewportWidth * 0.6);
+    }
+  }, []);
+
   return (
     <div
+      ref={columnRef}
       className={cn(
         "bg-zinc-900 rounded-lg border-t-2 flex flex-col overflow-hidden",
         color
@@ -69,11 +82,21 @@ export function KanbanColumn({
                   onMouseEnter={() => setShowInfo(true)}
                   onMouseLeave={() => setShowInfo(false)}
                   onClick={() => setShowInfo(!showInfo)}
+                  aria-label={`Information about ${title} column`}
+                  aria-expanded={showInfo}
+                  aria-controls="column-tooltip"
                 >
                   <Info className="w-3.5 h-3.5" />
                 </button>
                 {showInfo && (
-                  <div className="absolute left-0 top-6 z-50 w-64 p-2.5 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl text-xs text-zinc-300 leading-relaxed">
+                  <div
+                    id="column-tooltip"
+                    role="tooltip"
+                    className={cn(
+                      "absolute top-6 z-50 w-64 p-2.5 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl text-xs text-zinc-300 leading-relaxed",
+                      tooltipOnRight ? "right-0" : "left-0"
+                    )}
+                  >
                     {description}
                   </div>
                 )}
