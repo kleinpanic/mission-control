@@ -3,6 +3,8 @@
 import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
+import fs from "fs/promises";
+import path from "path";
 
 const execAsync = promisify(exec);
 
@@ -18,8 +20,12 @@ export async function GET() {
       return NextResponse.json(agentsCache);
     }
 
-    // Get agents list from OpenClaw CLI
-    // Filter out log lines starting with [ (plugin messages)
+    // Get config to extract agent definitions
+    const configPath = path.join(process.env.HOME || "/home/broklein", ".openclaw/openclaw.json");
+    const configRaw = await fs.readFile(configPath, "utf-8");
+    const config = JSON.parse(configRaw);
+    
+    // Get status to extract session/activity data
     const { stdout: rawOutput } = await execAsync(
       'openclaw status --json 2>/dev/null | grep -v "^\\["',
       { maxBuffer: 10 * 1024 * 1024 }
@@ -27,20 +33,57 @@ export async function GET() {
     
     const status = JSON.parse(rawOutput.trim());
     
-    // Extract agents data
-    const agents = status.agents || [];
+    // Build agent session map from status.sessions.recent
+    const sessionsByAgent: Record<string, any[]> = {};
+    (status.sessions?.recent || []).forEach((sess: any) => {
+      const agentId = sess.agentId;
+      if (!sessionsByAgent[agentId]) {
+        sessionsByAgent[agentId] = [];
+      }
+      sessionsByAgent[agentId].push(sess);
+    });
     
-    const result = {
-      agents: agents.map((agent: any) => ({
+    // Build heartbeat config map
+    const heartbeatByAgent: Record<string, any> = {};
+    (status.heartbeat?.agents || []).forEach((hb: any) => {
+      heartbeatByAgent[hb.agentId] = hb;
+    });
+    
+    // Combine agent config with runtime data
+    const agentList = config.agents?.list || [];
+    const agents = agentList.map((agent: any) => {
+      const sessions = sessionsByAgent[agent.id] || [];
+      const heartbeat = heartbeatByAgent[agent.id];
+      
+      // Get most recent session for last activity
+      const mostRecent = sessions.length > 0 
+        ? sessions.reduce((a, b) => a.updatedAt > b.updatedAt ? a : b)
+        : null;
+      
+      // Calculate status based on sessions and heartbeat
+      let status = "idle";
+      if (sessions.some((s: any) => s.abortedLastRun)) {
+        status = "error";
+      } else if (sessions.some((s: any) => s.systemSent && s.ageMs < 300000)) {
+        status = "active";
+      }
+      
+      return {
         id: agent.id,
         name: agent.name || agent.id,
         enabled: agent.enabled !== false,
-        status: agent.status || "unknown",
-        model: agent.model || null,
-        sessions: agent.sessions || 0,
-        heartbeatInterval: agent.heartbeatInterval || "unknown",
-        lastActivity: agent.lastActivity || null,
-      })),
+        status,
+        model: typeof agent.model === "string" ? agent.model : (agent.model?.primary || "default"),
+        sessions: sessions.length,
+        heartbeatInterval: heartbeat?.every || "unknown",
+        lastActivity: mostRecent ? new Date(mostRecent.updatedAt).toISOString() : null,
+        contextUsage: mostRecent?.percentUsed || 0,
+        totalTokens: sessions.reduce((sum: number, s: any) => sum + (s.totalTokens || 0), 0),
+      };
+    });
+    
+    const result = {
+      agents,
       timestamp: new Date().toISOString(),
     };
     
