@@ -77,7 +77,10 @@ export async function GET(request: NextRequest) {
     };
 
     const now_date = new Date();
-    const todayStr = now_date.toISOString().slice(0, 10); // "2026-02-12"
+    // Use local date for "today" comparison (not UTC) to match user's timezone
+    const localOffset = now_date.getTimezoneOffset() * 60 * 1000;
+    const localDate = new Date(now_date.getTime() - localOffset);
+    const todayStr = localDate.toISOString().slice(0, 10); // "2026-02-14" in local time
     const weekAgo = new Date(now_date.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const monthStart = `${now_date.getFullYear()}-${String(now_date.getMonth() + 1).padStart(2, '0')}-01`;
 
