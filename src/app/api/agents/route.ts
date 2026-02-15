@@ -55,7 +55,7 @@ export async function GET() {
     
     // Map provider prefix to auth mode
     const providerAuthMode: Record<string, string> = {};
-    for (const [profileKey, profile] of Object.entries(authProfiles)) {
+    for (const [_profileKey, profile] of Object.entries(authProfiles)) {
       const p = profile as any;
       if (p.provider) {
         providerAuthMode[p.provider] = p.mode || "unknown";

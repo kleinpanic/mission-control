@@ -10,9 +10,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  PieChart,
-  Pie,
-  Legend,
 } from "recharts";
 
 interface ModelUsageChartProps {
@@ -66,7 +63,7 @@ export function ModelUsageChart({ byModel, byAgent }: ModelUsageChartProps) {
     return null;
   };
 
-  const renderPieLabel = (entry: any) => {
+  const _renderPieLabel = (entry: any) => {
     const percent = ((entry.cost / Object.values(byModel).reduce((a, b) => a + b, 0)) * 100).toFixed(1);
     return `${entry.name}: ${percent}%`;
   };

@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { taskId, agentId, notify } = validation.data;
+    const { taskId, agentId, notify: _notify } = validation.data;
 
     // 1. Load the task
     const task = getTask(taskId);

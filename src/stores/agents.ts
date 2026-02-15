@@ -1,6 +1,6 @@
 // Mission Control - Agents Store
 import { create } from 'zustand';
-import { Agent, AgentStatus } from '@/types';
+import { Agent } from '@/types';
 
 interface AgentsState {
   agents: Agent[];

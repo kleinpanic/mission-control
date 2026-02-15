@@ -110,7 +110,7 @@ export async function readEvents(): Promise<EvolutionEvent[]> {
         }
       })
       .filter((event): event is EvolutionEvent => event !== null);
-  } catch (error) {
+  } catch {
     // File might not exist yet
     return [];
   }
@@ -133,7 +133,7 @@ export async function readPendingEvolutions(): Promise<PendingEvolution[]> {
         }
       })
       .filter((evo): evo is PendingEvolution => evo !== null);
-  } catch (error) {
+  } catch {
     return [];
   }
 }

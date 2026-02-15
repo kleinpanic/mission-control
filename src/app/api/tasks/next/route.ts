@@ -37,7 +37,7 @@ interface Task {
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const agentId = searchParams.get("agent");
-  const skills = searchParams.get("skills")?.split(",") || [];
+  const _skills = searchParams.get("skills")?.split(",") || [];
 
   if (!agentId) {
     return NextResponse.json(

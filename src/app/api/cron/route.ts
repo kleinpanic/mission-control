@@ -10,7 +10,7 @@ let cachedData: any = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 30 * 1000;
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const now = Date.now();
     
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch cron jobs from openclaw CLI (include disabled jobs)
-    const { stdout, stderr } = await execAsync(
+    const { stdout, stderr: _stderr } = await execAsync(
       'openclaw cron list --all --json',
       { timeout: 15000 }
     );
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     const { action, jobId } = body;
 
     if (action === 'run' && jobId) {
-      const { stdout, stderr } = await execAsync(
+      const { stdout, stderr: _stderr } = await execAsync(
         `openclaw cron run ${jobId} --force --json`,
         { timeout: 30000 }
       );

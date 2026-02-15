@@ -3,7 +3,6 @@
 import { Task, TaskStatus } from "@/types";
 import { KanbanColumn } from "./KanbanColumn";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Info } from "lucide-react";
 
 interface KanbanBoardProps {
   tasks: Task[];

@@ -595,7 +595,7 @@ export default function Dashboard() {
             {/* Next Heartbeats */}
             <div className="space-y-2">
               <h4 className="text-sm font-medium text-zinc-300">Upcoming Heartbeats</h4>
-              {status?.heartbeat.nextHeartbeats.slice(0, 5).map((hb, idx) => (
+              {status?.heartbeat.nextHeartbeats.slice(0, 5).map((hb, _idx) => (
                 <div
                   key={hb.agentId}
                   className="flex items-center justify-between bg-zinc-800/50 rounded px-3 py-2"

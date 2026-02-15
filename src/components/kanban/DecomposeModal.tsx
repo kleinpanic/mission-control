@@ -103,7 +103,7 @@ export function DecomposeModal({ open, onClose, taskId, taskTitle, onDecomposed 
             Decompose Task
           </DialogTitle>
           <DialogDescription>
-            Break down "{taskTitle}" into smaller, actionable subtasks
+            Break down &ldquo;{taskTitle}&rdquo; into smaller, actionable subtasks
           </DialogDescription>
         </DialogHeader>
 
@@ -111,7 +111,7 @@ export function DecomposeModal({ open, onClose, taskId, taskTitle, onDecomposed 
           <div className="space-y-4">
             <p className="text-sm text-zinc-400">
               This will use an LLM to analyze the task and suggest a decomposition into 3-7 subtasks.
-              You'll be able to preview and approve before creating them.
+              You&apos;ll be able to preview and approve before creating them.
             </p>
             <Button
               onClick={handleDecompose}
