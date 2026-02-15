@@ -107,8 +107,8 @@ export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDe
                 <Pencil className="w-3 h-3 mr-2" /> Edit
               </DropdownMenuItem>
               
-              {/* Decompose Task */}
-              {onDecompose && (
+              {/* Decompose Task - only for incomplete tasks */}
+              {onDecompose && !["completed", "archived"].includes(task.status) && (
                 <DropdownMenuItem onClick={onDecompose} className="text-zinc-300 focus:bg-zinc-700 text-xs">
                   <GitBranch className="w-3 h-3 mr-2" /> Decompose
                 </DropdownMenuItem>
