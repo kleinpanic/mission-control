@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { logTaskActivity } from "@/lib/taskActivity";
+import { DecomposeTaskSchema, validateRequest } from "@/lib/validation";
 
 export async function POST(req: NextRequest) {
   try {
-    const { taskId, model } = await req.json();
-
-    if (!taskId) {
-      return NextResponse.json({ error: "Task ID required" }, { status: 400 });
+    const body = await req.json();
+    
+    // Validate request body
+    const validation = validateRequest(DecomposeTaskSchema, body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.message, issues: validation.error.issues },
+        { status: 400 }
+      );
     }
+
+    const { taskId, model } = validation.data;
 
     const db = getDb();
     const task = db

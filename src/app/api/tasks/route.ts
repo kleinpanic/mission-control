@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createTask, getTasks, updateTask, deleteTask } from '@/lib/db';
 import { TaskStatus, TaskPriority, TaskType } from '@/types';
 import { logTaskActivity } from '@/lib/taskActivity';
+import { CreateTaskSchema, UpdateTaskSchema, validateRequest } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,32 +46,33 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, description, status, priority, type, assignedTo, tags, metadata,
-            complexity, danger, list, dueDate, estimatedMinutes, parentId, projectId } = body;
-
-    if (!title) {
+    
+    // Validate request body
+    const validation = validateRequest(CreateTaskSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'Missing required field: title' },
+        { error: validation.error.message, issues: validation.error.issues },
         { status: 400 }
       );
     }
 
+    const data = validation.data;
     const task = createTask({
-      title,
-      description,
-      status: (status || 'intake') as TaskStatus,
-      priority: (priority || 'medium') as TaskPriority,
-      type: (type || 'manual') as TaskType,
-      complexity: complexity || 'simple',
-      danger: danger || 'safe',
-      assignedTo: assignedTo || null,
-      list: list || 'agents',
-      tags: tags || [],
-      metadata,
-      dueDate: dueDate || null,
-      estimatedMinutes: estimatedMinutes || null,
-      parentId: parentId || null,
-      projectId: projectId || null,
+      title: data.title,
+      description: data.description || '',
+      status: data.status as TaskStatus,
+      priority: data.priority as TaskPriority,
+      type: data.type as TaskType,
+      complexity: data.complexity,
+      danger: data.danger,
+      assignedTo: data.assignedTo || null,
+      list: data.list,
+      tags: data.tags,
+      metadata: data.metadata,
+      dueDate: data.dueDate || null,
+      estimatedMinutes: data.estimatedMinutes || null,
+      parentId: data.parentId || null,
+      projectId: data.projectId || null,
     });
 
     // Log creation activity
@@ -89,14 +91,17 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, ...updates } = body;
-
-    if (!id) {
+    
+    // Validate request body
+    const validation = validateRequest(UpdateTaskSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'Missing task id' },
+        { error: validation.error.message, issues: validation.error.issues },
         { status: 400 }
       );
     }
+
+    const { id, ...updates } = validation.data;
 
     // Get old task for activity logging
     const oldTasks = getTasks({ status: undefined as any });
