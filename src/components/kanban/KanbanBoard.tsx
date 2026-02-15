@@ -71,7 +71,23 @@ export function KanbanBoard({
   }
 
   const tasksByStatus = [...CORE_COLUMNS, ...SECONDARY_COLUMNS].reduce((acc, column) => {
-    acc[column.id] = tasks.filter((task) => task.status === column.id);
+    const columnTasks = tasks.filter((task) => task.status === column.id);
+    
+    // Sort tasks: review column shows oldest first (FIFO), others show newest first
+    columnTasks.sort((a, b) => {
+      const aTime = new Date(a.createdAt || 0).getTime();
+      const bTime = new Date(b.createdAt || 0).getTime();
+      
+      if (column.id === "review") {
+        // Review: oldest first (FIFO - first in, first reviewed)
+        return aTime - bTime;
+      } else {
+        // All others: newest first
+        return bTime - aTime;
+      }
+    });
+    
+    acc[column.id] = columnTasks;
     return acc;
   }, {} as Record<TaskStatus, Task[]>);
 
@@ -102,7 +118,10 @@ export function KanbanBoard({
   return (
     <div className="overflow-x-auto">
       <div
-        className="grid gap-3 pb-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+        className="grid gap-4 pb-4"
+        style={{
+          gridTemplateColumns: `repeat(auto-fit, minmax(280px, 1fr))`,
+        }}
       >
         {visibleColumns.map((column) => (
           <div key={column.id}>

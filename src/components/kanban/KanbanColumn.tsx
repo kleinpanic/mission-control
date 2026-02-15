@@ -65,7 +65,7 @@ export function KanbanColumn({
     <div
       ref={columnRef}
       className={cn(
-        "bg-zinc-900 rounded-lg border-t-2 flex flex-col overflow-hidden",
+        "bg-zinc-900 rounded-lg border-t-2 flex flex-col overflow-hidden min-w-[280px]",
         color
       )}
       onDrop={onDrop}

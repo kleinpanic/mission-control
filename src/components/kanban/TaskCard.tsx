@@ -36,6 +36,21 @@ const priorityColors: Record<string, string> = {
   critical: "bg-red-900 text-red-100",
 };
 
+function formatRelativeTime(timestamp: string): string {
+  const now = Date.now();
+  const then = new Date(timestamp).getTime();
+  const diff = now - then;
+  
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return "just now";
+}
+
 // Quick actions per column status
 function getQuickActions(status: TaskStatus): { label: string; target: TaskStatus; icon: typeof Play }[] {
   switch (status) {
@@ -79,12 +94,17 @@ export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDe
   const priority = priorityColors[task.priority] || priorityColors.medium;
   const quickActions = getQuickActions(columnStatus);
   const canDispatch = agents && agents.length > 0 && onDispatchTask && ["ready", "intake", "backlog"].includes(columnStatus);
+  const isReviewColumn = columnStatus === "review";
 
   return (
     <Card
-      className="bg-zinc-800 border-zinc-700 cursor-grab active:cursor-grabbing hover:border-zinc-600 transition-colors"
+      className={cn(
+        "bg-zinc-800 border-zinc-700 cursor-grab active:cursor-grabbing hover:border-zinc-600 transition-colors",
+        isReviewColumn && "cursor-pointer"
+      )}
       draggable
       onDragStart={onDragStart}
+      onClick={isReviewColumn ? onEdit : undefined}
     >
       <CardContent className="p-2.5 space-y-1.5">
         {/* Title & Menu */}
@@ -169,6 +189,13 @@ export function TaskCard({ task, columnStatus, agents, onDragStart, onEdit, onDe
         {/* Description (truncated) */}
         {task.description && (
           <p className="text-[11px] text-zinc-500 line-clamp-1">{task.description}</p>
+        )}
+
+        {/* Timestamp */}
+        {task.createdAt && (
+          <p className="text-[10px] text-zinc-600">
+            Added {formatRelativeTime(task.createdAt)}
+          </p>
         )}
 
         {/* Compact badges row */}

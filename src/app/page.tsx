@@ -221,14 +221,21 @@ export default function Dashboard() {
         const oneDayAgo = now - (24 * 60 * 60 * 1000);
         const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
         
-        const completedTasks = tasksResult.tasks.filter((t: any) => t.status === 'done' && t.completedAt);
-        const tasksToday = completedTasks.filter((t: any) => new Date(t.completedAt).getTime() > oneDayAgo);
-        const tasksWeek = completedTasks.filter((t: any) => new Date(t.completedAt).getTime() > oneWeekAgo);
+        // Count tasks that moved to review or completed status (based on statusChangedAt)
+        const completedOrReviewTasks = tasksResult.tasks.filter((t: any) => 
+          (t.status === 'review' || t.status === 'completed') && t.statusChangedAt
+        );
+        const tasksToday = completedOrReviewTasks.filter((t: any) => 
+          new Date(t.statusChangedAt).getTime() > oneDayAgo
+        );
+        const tasksWeek = completedOrReviewTasks.filter((t: any) => 
+          new Date(t.statusChangedAt).getTime() > oneWeekAgo
+        );
         
         setTaskStats({
           today: tasksToday.length,
           week: tasksWeek.length,
-          total: completedTasks.length,
+          total: completedOrReviewTasks.length,
         });
       }
     } catch (error) {
