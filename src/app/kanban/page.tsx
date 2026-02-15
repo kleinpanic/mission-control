@@ -6,6 +6,7 @@ import { useGateway } from "@/providers/GatewayProvider";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskModal } from "@/components/kanban/TaskModal";
 import { DecomposeModal } from "@/components/kanban/DecomposeModal";
+import { QuickAdd } from "@/components/tasks/QuickAdd";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, RefreshCw } from "lucide-react";
@@ -221,6 +222,18 @@ export default function KanbanPage() {
             New Task
           </Button>
         </div>
+      </div>
+
+      {/* Quick Add - Natural Language Task Entry */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
+          <span>Quick Add</span>
+          <span className="text-xs text-zinc-500">Natural language task entry</span>
+        </h3>
+        <QuickAdd onTaskCreated={handleRefresh} />
+        <p className="text-xs text-zinc-500 mt-2">
+          Try: "remind me to review PR tomorrow at 3pm" or "urgent: fix bug in auth, assign to dev"
+        </p>
       </div>
 
       <div className="flex-1 min-h-0">
