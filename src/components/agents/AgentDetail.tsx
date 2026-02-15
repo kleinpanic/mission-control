@@ -8,9 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useGateway } from "@/providers/GatewayProvider";
 import {
   Send,
-  History,
   RefreshCw,
-  ExternalLink,
   Minimize2,
   Trash2,
   Loader2,

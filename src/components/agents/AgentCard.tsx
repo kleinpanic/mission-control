@@ -13,8 +13,6 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
-  Send,
-  History,
   MoreVertical,
   RefreshCw,
   Settings,

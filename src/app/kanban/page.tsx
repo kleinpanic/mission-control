@@ -307,7 +307,7 @@ export default function KanbanPage() {
         </h3>
         <QuickAdd onTaskCreated={handleRefresh} />
         <p className="text-xs text-zinc-500 mt-2">
-          Try: "remind me to review PR tomorrow at 3pm" or "urgent: fix bug in auth, assign to dev"
+          Try: &ldquo;remind me to review PR tomorrow at 3pm&rdquo; or &ldquo;urgent: fix bug in auth, assign to dev&rdquo;
         </p>
       </div>
 

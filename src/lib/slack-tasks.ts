@@ -1,6 +1,5 @@
 // Mission Control - Slack to Kanban integration
 import { createTask } from './db';
-import { TaskType, TaskPriority } from '@/types';
 
 const MAIN_CHANNEL_ID = 'C0ACZ4ZF8PR'; // #main-openclaw
 

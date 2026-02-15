@@ -10,11 +10,9 @@ import {
   AlertCircle, 
   AlertTriangle, 
   Info, 
-  Filter,
   Server,
   Database,
   Cpu,
-  HardDrive,
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,7 +65,7 @@ interface DebugInfo {
 
 export default function AnalyticsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [auditLogs, setAuditLogs] = useState<LogEntry[]>([]);
+  const [_auditLogs, setAuditLogs] = useState<LogEntry[]>([]);
   const [fileActivity, setFileActivity] = useState<FileActivity[]>([]);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [levelFilter, setLevelFilter] = useState<string | null>(null);

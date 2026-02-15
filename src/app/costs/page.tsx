@@ -10,7 +10,7 @@ import { BudgetAlerts } from "@/components/costs/BudgetAlerts";
 import { ModelUsageAlerts } from "@/components/costs/ModelUsageAlerts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RefreshCw, Wifi, WifiOff, Loader2, CreditCard, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGateway } from "@/providers/GatewayProvider";
@@ -90,7 +90,7 @@ export default function CostsPage() {
         } else {
           // Calculate summary from raw data if missing (e.g. from WebSocket)
           const daily = finalCostResult.daily || [];
-          const totals = finalCostResult.totals || {};
+          const _totals = finalCostResult.totals || {};
           
           const now = new Date();
           // Use local date for "today" comparison (not UTC) to match user's timezone

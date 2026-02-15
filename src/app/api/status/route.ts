@@ -233,7 +233,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { action, agentId } = body;
+    const { action, agentId: _agentId } = body;
 
     if (action === "trigger-heartbeat") {
       // Trigger immediate heartbeat via cron wake

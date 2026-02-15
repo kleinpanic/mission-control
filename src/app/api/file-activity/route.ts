@@ -14,7 +14,7 @@ interface FileActivity {
   operations: string[];
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const auditPath = path.join(LOGS_DIR, 'audit-trail.jsonl');
     const content = await fs.readFile(auditPath, 'utf-8');
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
             activity.operations.push(entry.operation);
           }
         }
-      } catch (error) {
+      } catch {
         // Skip malformed lines
         continue;
       }

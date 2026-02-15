@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings, Server, Database, Moon, Sun, Monitor, Bot, Cpu, RefreshCw, Save, Lock, Eye, EyeOff, ChevronDown, ChevronRight, MessageSquare, Hash, User, ArrowRight, Globe } from "lucide-react";
+import { Server, Database, Moon, Sun, Monitor, Bot, Cpu, RefreshCw, Save, Lock, Eye, EyeOff, ChevronDown, ChevronRight, MessageSquare, Hash, User, ArrowRight, Globe } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useGateway } from "@/providers/GatewayProvider";
 import { cn } from "@/lib/utils";
@@ -96,7 +96,7 @@ export default function SettingsPage() {
       
       setLoading(true);
       try {
-        const [agentsResult, statusResult, configResult, channelsResult, httpChannelsResult] = await Promise.all([
+        const [agentsResult, statusResult, configResult, _channelsResult, httpChannelsResult] = await Promise.all([
           request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
           request<any>("status").catch(e => { console.error("status error:", e); return null; }),
           request<any>("config.get").catch(e => { console.error("config.get error:", e); return null; }),

@@ -18,7 +18,7 @@ const eslintConfig = defineConfig([
       // Relaxed for dashboard/prototype code — tighten later
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "warn",
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" }],
       "react/no-unescaped-entities": "warn",
       "react-hooks/exhaustive-deps": "warn",
       "@typescript-eslint/no-empty-object-type": "warn",

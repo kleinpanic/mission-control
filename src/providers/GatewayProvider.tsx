@@ -211,7 +211,7 @@ export function GatewayProvider({ children }: Props) {
         handleMessage(event.data);
       };
       
-      ws.onerror = (error) => {
+      ws.onerror = (_error) => {
         console.error("[Gateway] WebSocket error occurred", {
           readyState: ws.readyState,
           url: resolvedUrl,

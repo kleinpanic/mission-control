@@ -291,7 +291,7 @@ export async function POST(request: NextRequest) {
     const text = params.get('text') || '';
     const userId = params.get('user_id') || '';
     const userName = params.get('user_name') || '';
-    const channelId = params.get('channel_id') || '';
+    const _channelId = params.get('channel_id') || '';
 
     console.log(`[Slack Command] /kanban ${text} from ${userName} (${userId})`);
 
