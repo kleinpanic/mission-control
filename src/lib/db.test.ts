@@ -6,7 +6,17 @@ import { unlinkSync } from 'fs';
 
 const TEST_DB_PATH = join(tmpdir(), `mc-test-${process.pid}.db`);
 
-describe('Database Functions', () => {
+// Check if better-sqlite3 native bindings are available (fails in CI without build tools)
+let dbAvailable = true;
+try {
+  // Test if we can instantiate better-sqlite3
+  require('better-sqlite3')(':memory:').close();
+} catch {
+  dbAvailable = false;
+  console.warn('⚠️  Skipping DB tests - better-sqlite3 native bindings not available');
+}
+
+describe.skipIf(!dbAvailable)('Database Functions', () => {
   beforeAll(() => {
     process.env.TASKS_DB_PATH = TEST_DB_PATH;
     // Init schema for test database
