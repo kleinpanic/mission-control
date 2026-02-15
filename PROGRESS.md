@@ -1,64 +1,54 @@
-# Mission Control - Development Progress
+# Mission Control Feature Integration - Autonomous Progress
 
-## Active Work (2026-02-14)
+**Session:** auto-1771119257  
+**Started:** 2026-02-14 20:34 EST  
+**Current Time:** 2026-02-14 21:00 EST  
+**Task:** Build Issue Discovery + Task Decomposition + Slack-Kanban integration
 
-### Slack Integration + Agent Dashboard (d604776c)
-**Started:** 2026-02-14 20:23 EST
-**Second Attempt Completed:** 2026-02-14 20:57 EST
-**Status:** PARTIAL SUCCESS
-**Priority:** 0 (active work from Klein)
+## Status Summary
 
-**Validation Results:**
+### ✅ Phase 1: Slack-Kanban Integration
+- [x] `/api/slack/commands` endpoint (slash commands)
+- [x] Block Kit message templates
+- [x] Manual testing (curl) passed
+- [ ] **BLOCKER:** Debug Slack→Kanban auto-task creation (payload parsing issue)
+- [x] Created debug version with extensive logging
 
-✅ **Feature 2: Agent Activity Dashboard** - **WORKING**
-- Component enabled and visible in UI
-- Shows "Agent Activity & Swarm" section
-- Displays metrics: Swarm workers (2), Subagents (2), Tools (0)
-- Renders subagent hierarchy with parent → child relationships
-- Real-time updates via WebSocket
-- Screenshot: Shows dev agent with 2 child subagents below it
+### ✅ Phase 2: Task Decomposition
+- [x] `/api/tasks/decompose` endpoint
+- [x] DecomposeModal UI component  
+- [x] Decompose button integrated into Kanban TaskCard dropdown
+- [x] Build passing (28 routes)
+- [x] **COMMITTED:** 77ab7ce
 
-❌ **Feature 1: Slack → Kanban** - **NOT WORKING**
-- Code integrated in `server.ts` (line ~145)
-- `handleSlackMessage` function exists and is called
-- **Problem:** No tasks being created when posting to #main
-- **Root cause:** Payload structure mismatch or WebSocket event not firing
-- **Evidence:** No console.log output from SlackTasks, no DB entries
+### ⏳ Phase 3: Issue Discovery
+- [ ] Not started (awaiting Slack debug completion)
 
-**What Works:**
-- Dashboard loads, WebSocket connects
-- Agent Activity section visible with live data
-- Hierarchy rendering (parent/child relationships)
-- Real-time metrics
+## Current Work
 
-**What Doesn't:**
-- Slack messages not triggering task creation
-- No server logs from handleSlackMessage
-- Database shows 0 slack-type tasks
+**Active Task:** Debugging Slack integration payload parsing
 
-**Next Steps:**
-1. Debug actual gateway message.channel payload structure
-2. Add console.log to see if event handler is firing
-3. Fix payload parsing logic
-4. Re-test with actual Slack message
+**Created Files:**
+- `src/lib/slack-tasks-debug.ts` - Enhanced logging version
+- Next: Update `server.ts` to use debug version
+- Next: Test with actual Slack message to #main
+- Next: Fix payload structure issues
 
-**Files Modified:**
-- `src/components/dashboard/AgentActivity.tsx` (enabled)
-- `src/app/page.tsx` (component added)
-- `src/lib/slack-tasks.ts` (created)
-- `server.ts` (event listener added)
+**Blockers:** 
+None - working on Slack debug
 
----
+**Commits This Session:**
+1. `3a63cdd` - Feature proposals doc
+2. `4faf319` - UX improvements (kanban tooltips, model selection)
+3. `1b476e7` - Task Decomposition API and UI
+4. `77ab7ce` - Decompose button integration ← CURRENT
 
-## Completed Features
+## Next Steps
+1. Update server.ts to import slack-tasks-debug
+2. Restart dev server with logging
+3. Post "fix the dashboard!" to #main-openclaw
+4. Check logs for payload structure
+5. Fix parsing logic
+6. Commit working Slack integration
+7. Move to Phase 3 (Issue Discovery)
 
-### Round 4 UX Improvements (2026-02-14)
-**Completed:** 2026-02-14 19:15 EST
-**Branch:** fix/round4-security-dynamic-kanban
-**Status:** Ready for merge
-
-**Changes:**
-- WebSocket security headers
-- Dynamic kanban list creation
-- Sidebar improvements
-- Analytics tab polish
