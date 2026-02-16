@@ -37,7 +37,15 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y build-essential python3
       - run: pnpm install --frozen-lockfile
       # Rebuild better-sqlite3 native module using npm (pnpm blocks build scripts)
-      - run: cd node_modules/.pnpm/better-sqlite3@12.6.2/node_modules/better-sqlite3 && npm rebuild
+      - name: Rebuild better-sqlite3 native bindings
+        run: |
+          SQLITE_PATH=$(find node_modules/.pnpm -type d -name "better-sqlite3" -path "*/node_modules/better-sqlite3" | head -1)
+          if [ -n "$SQLITE_PATH" ]; then
+            cd "$SQLITE_PATH" && npm rebuild
+          else
+            echo "Warning: better-sqlite3 not found in pnpm store"
+            exit 1
+          fi
       - run: pnpm test:run
 
   build:
