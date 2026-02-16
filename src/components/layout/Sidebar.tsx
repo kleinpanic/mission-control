@@ -12,6 +12,9 @@ import {
   Settings,
   ClipboardCheck,
   Dna,
+  TrendingUp,
+  AlertCircle,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,11 +22,14 @@ const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Agents", href: "/agents", icon: Bot },
   { name: "Kanban", href: "/kanban", icon: Kanban },
+  { name: "Velocity", href: "/velocity", icon: TrendingUp },
   { name: "Approvals", href: "/approvals", icon: ClipboardCheck },
   { name: "Evolver", href: "/evolver", icon: Dna },
   { name: "Costs", href: "/costs", icon: DollarSign },
   { name: "Cron", href: "/cron", icon: Clock },
   { name: "Sessions", href: "/sessions", icon: MessageSquare },
+  { name: "Issues", href: "/issues", icon: AlertCircle },
+  { name: "Analytics", href: "/analytics", icon: BarChart3 },
 ];
 
 export function Sidebar() {

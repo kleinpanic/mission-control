@@ -153,15 +153,21 @@ export function GatewayProvider({ children }: Props) {
           });
         }
         
-        // Add to realtime store for Recent Activity
-        const event: Event = {
-          type: eventName as any,
-          timestamp: new Date().toISOString(),
-          agentId: payload.agentId,
-          sessionKey: payload.sessionKey,
-          data: payload,
-        };
-        addEvent(event);
+        // Only add meaningful events to realtime store (not health pings or noisy streams)
+        const STORE_WORTHY_EVENTS = new Set([
+          "agent", "session", "cron", "cron.run", "task", "task.update",
+          "approval", "cost", "message.channel",
+        ]);
+        if (STORE_WORTHY_EVENTS.has(eventName)) {
+          const event: Event = {
+            type: eventName as any,
+            timestamp: new Date().toISOString(),
+            agentId: payload.agentId,
+            sessionKey: payload.sessionKey,
+            data: payload,
+          };
+          addEvent(event);
+        }
         
         return;
       }

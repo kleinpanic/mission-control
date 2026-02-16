@@ -8,10 +8,10 @@ import path from "path";
 
 const execAsync = promisify(exec);
 
-// Cache for 5 seconds
+// Cache for 30 seconds (agent data doesn't change often)
 let agentsCache: any = null;
 let agentsCacheTime = 0;
-const AGENTS_CACHE_TTL = 5000;
+const AGENTS_CACHE_TTL = 30_000;
 
 export async function GET() {
   try {
@@ -53,22 +53,30 @@ export async function GET() {
     const authProfiles = config.auth?.profiles || {};
     const modelProviders = config.models?.providers || {};
     
-    // Map provider prefix to auth mode
+    // Map provider ID to auth mode using auth profiles
     const providerAuthMode: Record<string, string> = {};
     for (const [_profileKey, profile] of Object.entries(authProfiles)) {
       const p = profile as any;
-      if (p.provider) {
-        providerAuthMode[p.provider] = p.mode || "unknown";
+      if (p.provider && p.mode) {
+        // Auth profiles use format like "provider: anthropic, mode: token"
+        providerAuthMode[p.provider] = p.mode;
       }
     }
-    // Infer from model provider config (apiKey = api, baseUrl with localhost = local)
+    // Infer from model provider config for providers without explicit auth profiles
     for (const [providerId, providerConfig] of Object.entries(modelProviders)) {
       const pc = providerConfig as any;
-      if (providerAuthMode[providerId]) continue; // auth profile takes precedence
-      if (pc.baseUrl?.includes("localhost") || pc.baseUrl?.includes("127.0.0.1")) {
+      if (providerAuthMode[providerId]) continue; // explicit auth profile takes precedence
+      if (pc.baseUrl?.includes("localhost") || pc.baseUrl?.includes("127.0.0.1") || pc.baseUrl?.includes("11434")) {
         providerAuthMode[providerId] = "local";
       } else if (pc.apiKey) {
-        providerAuthMode[providerId] = "api";
+        providerAuthMode[providerId] = "api-key";
+      } else {
+        // No apiKey and no auth profile — likely inherits from a parent provider's oauth
+        // Check if the provider name starts with a known provider that has auth
+        const parentProvider = Object.keys(providerAuthMode).find(p => providerId.startsWith(p));
+        if (parentProvider) {
+          providerAuthMode[providerId] = providerAuthMode[parentProvider];
+        }
       }
     }
     

@@ -269,8 +269,8 @@ export default function Dashboard() {
       }
     });
 
-    // Periodic refresh every 30 seconds for data that doesn't have events
-    const interval = setInterval(fetchData, 30000);
+    // Periodic refresh — 120s when WS connected (events cover most updates), 30s when offline
+    const interval = setInterval(fetchData, connected ? 120000 : 30000);
 
     return () => {
       unsubAgent();

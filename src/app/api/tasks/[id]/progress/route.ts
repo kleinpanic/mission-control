@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import Database from "better-sqlite3";
-import { existsSync } from "fs";
-
-const DB_PATH = `${process.env.HOME}/.openclaw/data/tasks.db`;
+import { getTask, updateTask } from "@/lib/db";
 
 interface ProgressUpdate {
   status?: "in_progress" | "review" | "done" | "blocked";
@@ -42,13 +39,6 @@ export async function POST(
 ) {
   const { id: taskId } = await params;
 
-  if (!existsSync(DB_PATH)) {
-    return NextResponse.json(
-      { error: "Task database not found" },
-      { status: 500 }
-    );
-  }
-
   let body: ProgressUpdate;
   try {
     body = await request.json();
@@ -74,55 +64,36 @@ export async function POST(
   }
 
   try {
-    const db = new Database(DB_PATH);
-
-    // Check if task exists
-    const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId) as any;
+    // 1. Load the task
+    const task = getTask(taskId);
 
     if (!task) {
-      db.close();
       return NextResponse.json(
         { error: "Task not found" },
         { status: 404 }
       );
     }
 
-    // Build update query dynamically based on provided fields
-    const updates: string[] = [];
-    const values: any[] = [];
-
-    if (body.status) {
-      updates.push("status = ?");
-      values.push(body.status);
-    }
-
-    // Store progress and message in metadata JSON field (if exists)
-    // For now, just update updatedAt timestamp
-    updates.push("updatedAt = ?");
-    values.push(new Date().toISOString());
-
+    // 2. Prepare updates
+    const updates: any = {};
+    if (body.status) updates.status = body.status;
+    
     // If status changed to 'in_progress', set assignedTo if not already set
     if (body.status === "in_progress" && !task.assignedTo) {
-      updates.push("assignedTo = ?");
-      values.push(body.agentId);
+      updates.assignedTo = body.agentId;
     }
 
-    values.push(taskId);
+    // Store progress and message in metadata
+    updates.metadata = {
+      ...(task.metadata || {}),
+      progress: body.progress !== undefined ? body.progress : (task.metadata?.progress),
+      message: body.message || (task.metadata?.message),
+      lastProgressUpdate: new Date().toISOString(),
+      lastProgressAgent: body.agentId,
+    };
 
-    const updateQuery = `
-      UPDATE tasks
-      SET ${updates.join(", ")}
-      WHERE id = ?
-    `;
-
-    db.prepare(updateQuery).run(...values);
-
-    const updatedTask = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
-
-    db.close();
-
-    // TODO: Broadcast WebSocket update
-    // TODO: Post Slack notification if significant status change
+    // 3. Update task (this automatically triggers WebSocket broadcast via lib/db)
+    const updatedTask = updateTask(taskId, updates);
 
     console.log(`[progress] Task ${taskId} updated by ${body.agentId}:`, {
       status: body.status,
@@ -135,7 +106,7 @@ export async function POST(
       task: updatedTask,
     });
   } catch (error) {
-    console.error("[tasks/progress] Database error:", error);
+    console.error("[tasks/progress] Error updating task:", error);
     return NextResponse.json(
       { error: "Failed to update task" },
       { status: 500 }
