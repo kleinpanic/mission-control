@@ -5,10 +5,22 @@
  * - Main HTTP server on port 3333 handles Next.js requests
  * - Standalone WebSocket proxy on port 9999 handles gateway connections
  * - This avoids conflicts between Next.js HTTP handling and WebSocket upgrades
+ * 
+ * Auth model:
+ * - The proxy uses the gateway's device identity (ed25519 keypair) to authenticate
+ *   with full operator.admin scopes. Without device identity, the gateway clears
+ *   all scopes and WS actions (compact, reset, delete, wake, restart) all fail
+ *   with "missing scope: operator.read/admin".
+ * - The device identity is loaded from ~/.openclaw/identity/device.json
+ * - The device auth token is loaded from ~/.openclaw/identity/device-auth.json
+ * - On connect, the proxy sends the device object (id + publicKey) and the device
+ *   token as auth.token, which the gateway verifies to grant scopes.
  */
 
 import { config } from "dotenv";
 import { resolve } from "path";
+import { readFileSync } from "fs";
+import crypto from "crypto";
 
 config({ path: resolve(process.cwd(), ".env.local"), override: true });
 config({ path: resolve(process.cwd(), ".env") });
@@ -28,6 +40,111 @@ const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || "ws://127.0.0.1:18789";
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 const MC_PASSWORD = process.env.MISSION_CONTROL_PASSWORD || "";
 const ALLOWED_ORIGIN = `http://localhost:${port}`;
+
+// ---------------------------------------------------------------------------
+// Device Identity — required for gateway to grant operator scopes
+// ---------------------------------------------------------------------------
+interface DeviceIdentity {
+  deviceId: string;
+  publicKeyPem: string;
+  privateKeyPem: string;
+}
+interface DeviceAuthToken {
+  token: string;
+  role: string;
+  scopes: string[];
+}
+
+const OPENCLAW_HOME = process.env.OPENCLAW_STATE_DIR || resolve(process.env.HOME || "~", ".openclaw");
+const DEVICE_IDENTITY_PATH = resolve(OPENCLAW_HOME, "identity/device.json");
+const DEVICE_AUTH_PATH = resolve(OPENCLAW_HOME, "identity/device-auth.json");
+
+let deviceIdentity: DeviceIdentity | null = null;
+let deviceAuthToken: DeviceAuthToken | null = null;
+
+try {
+  const raw = readFileSync(DEVICE_IDENTITY_PATH, "utf8");
+  const parsed = JSON.parse(raw);
+  if (parsed?.version === 1 && parsed.deviceId && parsed.publicKeyPem && parsed.privateKeyPem) {
+    deviceIdentity = {
+      deviceId: parsed.deviceId,
+      publicKeyPem: parsed.publicKeyPem,
+      privateKeyPem: parsed.privateKeyPem,
+    };
+    console.log(`[Device] Loaded identity: ${parsed.deviceId.slice(0, 16)}...`);
+  }
+} catch (e: any) {
+  console.warn(`[Device] Failed to load identity from ${DEVICE_IDENTITY_PATH}: ${e.message}`);
+}
+
+try {
+  const raw = readFileSync(DEVICE_AUTH_PATH, "utf8");
+  const parsed = JSON.parse(raw);
+  const opToken = parsed?.tokens?.operator;
+  if (opToken?.token) {
+    deviceAuthToken = {
+      token: opToken.token,
+      role: opToken.role || "operator",
+      scopes: opToken.scopes || [],
+    };
+    console.log(`[Device] Loaded auth token with scopes: ${deviceAuthToken.scopes.join(", ")}`);
+  }
+} catch (e: any) {
+  console.warn(`[Device] Failed to load auth token from ${DEVICE_AUTH_PATH}: ${e.message}`);
+}
+
+/**
+ * Convert PEM public key to raw base64url (what the gateway expects as device.publicKey).
+ * Ed25519 SPKI DER = 12-byte prefix + 32-byte raw key.
+ */
+function publicKeyPemToBase64Url(pem: string): string {
+  const keyObj = crypto.createPublicKey(pem);
+  const spki = keyObj.export({ type: "spki", format: "der" });
+  // Ed25519 SPKI prefix is 12 bytes (30 2a 30 05 06 03 2b 65 70 03 21 00)
+  const ED25519_SPKI_PREFIX_LEN = 12;
+  const raw = spki.length === ED25519_SPKI_PREFIX_LEN + 32
+    ? spki.subarray(ED25519_SPKI_PREFIX_LEN)
+    : spki;
+  return raw.toString("base64url");
+}
+
+/**
+ * Sign a payload with the device private key (ed25519).
+ */
+function signPayload(privateKeyPem: string, payload: string): string {
+  const sign = crypto.sign(null, Buffer.from(payload), crypto.createPrivateKey(privateKeyPem));
+  return sign.toString("base64url");
+}
+
+/**
+ * Build the device auth payload string (must match gateway's buildDeviceAuthPayload exactly).
+ * Format: version|deviceId|clientId|clientMode|role|scopes|signedAtMs|token[|nonce]
+ */
+function buildDeviceAuthPayload(params: {
+  deviceId: string;
+  clientId: string;
+  clientMode: string;
+  role: string;
+  scopes: string[];
+  signedAtMs: number;
+  token: string | null;
+  nonce?: string;
+  version?: string;
+}): string {
+  const version = params.version ?? (params.nonce ? "v2" : "v1");
+  const base = [
+    version,
+    params.deviceId,
+    params.clientId,
+    params.clientMode,
+    params.role,
+    params.scopes.join(","),
+    String(params.signedAtMs),
+    params.token || "",
+  ];
+  if (version === "v2") base.push(params.nonce || "");
+  return base.join("|");
+}
 
 // Clean up stale dev lock to prevent restart loops
 import { existsSync, unlinkSync } from "fs";
@@ -85,6 +202,7 @@ function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?:
   let clientClosed = false;
   let gatewayConnected = false;
   let pendingToGateway: string[] = [];
+  let connectNonce: string | null = null; // Captured from connect.challenge event
 
   // Connect to gateway with proper Origin header
   const gatewayWs = new WebSocket(GATEWAY_URL, {
@@ -131,6 +249,12 @@ function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?:
 
       // Always forward responses (req/res pairs)
       if (msg.type === "res") {
+        // Log action responses (not connect) for debugging scope/auth issues
+        if (msg.id && msg.id !== "connect" && msg.id !== "gateway-connect") {
+          const ok = msg.ok ? "✓" : "✗";
+          const detail = msg.ok ? "" : ` error="${msg.error?.message || ""}"`;
+          console.log(`[WS Proxy] ← ${ok} ${msg.id.slice(0, 8)}${detail}`);
+        }
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.send(str);
         }
@@ -140,6 +264,14 @@ function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?:
       // Filter events: only forward UI-relevant ones
       if (msg.type === "event") {
         const eventName: string = msg.event || "";
+
+        // Capture nonce from connect.challenge for device auth signing
+        if (eventName === "connect.challenge") {
+          const payload = msg.payload;
+          if (payload && typeof payload.nonce === "string") {
+            connectNonce = payload.nonce;
+          }
+        }
 
         // Slack integration hook (runs regardless of forwarding)
         if (eventName === "message.channel") {
@@ -185,7 +317,7 @@ function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?:
       const msg = JSON.parse(str);
 
       if (msg.type === "req" && msg.method === "connect") {
-        if (dev) console.log("[WS Proxy] Injecting gateway token");
+        console.log("[WS Proxy] Rewriting connect handshake with device identity");
         
         // Check MC password if configured
         if (MC_PASSWORD) {
@@ -200,14 +332,69 @@ function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?:
           }
         }
 
-        // Inject gateway token
-        if (!msg.params) msg.params = {};
-        if (!msg.params.auth) msg.params.auth = {};
-        msg.params.auth.token = GATEWAY_TOKEN;
-        delete msg.params.auth.mcPassword;
-        delete msg.params.auth.password;
+        // Build a proper connect message with device identity.
+        // Without device identity, the gateway clears ALL scopes → every
+        // action (compact, reset, wake, restart) fails with "missing scope".
+        const scopes = ["operator.admin", "operator.read", "operator.approvals", "operator.pairing"];
+        const clientId = "gateway-client"; // Must match GATEWAY_CLIENT_IDS
+        const clientMode = "backend";      // Must match GATEWAY_CLIENT_MODES
+        const role = "operator";
+        const signedAtMs = Date.now();
 
-        const rewritten = JSON.stringify(msg);
+        // Determine auth token: prefer device auth token, fall back to gateway token
+        const authToken = deviceAuthToken?.token || GATEWAY_TOKEN;
+
+        // Build device object if identity is available
+        let device: any = undefined;
+        if (deviceIdentity) {
+          const publicKeyB64Url = publicKeyPemToBase64Url(deviceIdentity.publicKeyPem);
+          // Use nonce from connect.challenge if available (required for non-local connections)
+          const nonce = connectNonce || undefined;
+          const version = nonce ? "v2" : "v1";
+          const payload = buildDeviceAuthPayload({
+            deviceId: deviceIdentity.deviceId,
+            clientId,
+            clientMode,
+            role,
+            scopes,
+            signedAtMs,
+            token: authToken,
+            nonce,
+            version,
+          });
+          const signature = signPayload(deviceIdentity.privateKeyPem, payload);
+          device = {
+            id: deviceIdentity.deviceId,
+            publicKey: publicKeyB64Url,
+            signature,
+            signedAt: signedAtMs,
+            nonce,
+          };
+        }
+
+        const connectMsg = {
+          type: "req",
+          id: msg.id, // preserve original message ID so client gets the response
+          method: "connect",
+          params: {
+            minProtocol: 3,
+            maxProtocol: 3,
+            client: {
+              id: clientId,
+              displayName: "Mission Control Proxy",
+              version: "1.2.0",
+              platform: process.platform,
+              mode: clientMode,
+            },
+            role,
+            scopes,
+            auth: { token: authToken },
+            device,
+          },
+        };
+
+        const rewritten = JSON.stringify(connectMsg);
+        if (dev) console.log(`[WS Proxy] Connect with device=${!!device} scopes=${scopes.join(",")}`);
         if (gatewayConnected && gatewayWs.readyState === WebSocket.OPEN) {
           gatewayWs.send(rewritten);
         } else {
@@ -217,7 +404,13 @@ function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?:
       }
     } catch {}
 
-    // Pass through other messages
+    // Pass through other messages (action requests like sessions.compact, wake, etc.)
+    try {
+      const parsed = JSON.parse(str);
+      if (parsed.type === "req") {
+        console.log(`[WS Proxy] Forwarding: ${parsed.method} (id=${parsed.id})`);
+      }
+    } catch {}
     if (gatewayConnected && gatewayWs.readyState === WebSocket.OPEN) {
       gatewayWs.send(str);
     } else {
