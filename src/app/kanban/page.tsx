@@ -53,18 +53,19 @@ export default function KanbanPage() {
     }
   }, []);
 
-  // Fetch agents from gateway for dispatch dropdown
+  // Fetch agents via HTTP API (avoids WS operator.read scope issues)
   const fetchAgents = useCallback(async () => {
-    if (!connected) return;
     try {
-      const result = await request<any>("agents.list");
-      if (result?.agents) {
-        setAgents(result.agents.map((a: any) => ({ id: a.id, name: a.name || a.id })));
+      const res = await fetch("/api/agents");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.agents) {
+        setAgents(data.agents.map((a: any) => ({ id: a.id, name: a.name || a.id })));
       }
     } catch (error) {
       console.error("Failed to fetch agents:", error);
     }
-  }, [connected, request]);
+  }, []);
 
   useEffect(() => {
     fetchTasks();

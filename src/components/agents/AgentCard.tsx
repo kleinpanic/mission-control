@@ -126,8 +126,9 @@ export function AgentCard({ agent }: AgentCardProps) {
     
     setActionInProgress("compact");
     try {
-      // Get all sessions for this agent and compact each one
-      const result = await request<any>("sessions.list", { limit: 100 });
+      // Get all sessions for this agent via HTTP API and compact each one
+      const res = await fetch("/api/sessions");
+      const result = res.ok ? await res.json() : null;
       const agentSessions = (result?.sessions || []).filter((s: any) => {
         const parts = (s.key || "").split(":");
         return (s.agentId || parts[1]) === agent.id;

@@ -36,35 +36,11 @@ export default function AgentsPage() {
   const fetchAgents = useCallback(async () => {
     setLoading(true);
     try {
-      // Try WebSocket first, fall back to HTTP API
-      let agentsResult = null;
-      let statusResult = null;
-      
-      if (connected) {
-        [agentsResult, statusResult] = await Promise.all([
-          request<any>("agents.list").catch(e => { console.error("agents.list WS error:", e); return null; }),
-          request<any>("status").catch(e => { console.error("status WS error:", e); return null; }),
-        ]);
-      }
-      
-      // Fallback to HTTP APIs if WebSocket failed
-      if (!agentsResult) {
-        try {
-          const res = await fetch("/api/agents");
-          agentsResult = await res.json();
-        } catch (e) {
-          console.error("agents HTTP API error:", e);
-        }
-      }
-      
-      if (!statusResult) {
-        try {
-          const res = await fetch("/api/status");
-          statusResult = await res.json();
-        } catch (e) {
-          console.error("status HTTP API error:", e);
-        }
-      }
+      // Use HTTP APIs exclusively — avoids WS operator.read scope errors
+      const [agentsResult, statusResult] = await Promise.all([
+        fetch("/api/agents").then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch("/api/status").then(r => r.ok ? r.json() : null).catch(() => null),
+      ]);
       
       if (agentsResult || statusResult) {
         // Build maps from status data

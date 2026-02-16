@@ -59,26 +59,14 @@ export default function CostsPage() {
   const { connected, connecting, request } = useGateway();
 
   const fetchCosts = useCallback(async () => {
-    if (!connected) return;
-    
     setLoading(true);
     setError(null);
     try {
-      // Fetch cost data via WebSocket and history via HTTP
-      const [costResult, historyResult] = await Promise.all([
-        request<any>("usage.cost").catch(e => {
-          console.error("usage.cost error:", e);
-          return null;
-        }),
+      // Use HTTP APIs exclusively — avoids WS operator.read scope errors
+      const [finalCostResult, historyResult] = await Promise.all([
+        fetch("/api/costs").then(r => r.ok ? r.json() : null).catch(() => null),
         fetch("/api/costs/history").then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
-
-      // If WebSocket costResult is missing, try fetching from the internal API
-      let finalCostResult = costResult;
-      if (!finalCostResult) {
-        console.log('[Costs] WebSocket usage.cost failed, falling back to /api/costs');
-        finalCostResult = await fetch("/api/costs").then(r => r.ok ? r.json() : null).catch(() => null);
-      }
 
       if (finalCostResult) {
         console.log('[Costs] Data received:', finalCostResult);
@@ -148,14 +136,12 @@ export default function CostsPage() {
     } finally {
       setLoading(false);
     }
-  }, [connected, request]);
+  }, []);
 
-  // Fetch data when connected
+  // Fetch data on mount (HTTP-only, no WS dependency)
   useEffect(() => {
-    if (connected) {
-      fetchCosts();
-    }
-  }, [connected, fetchCosts]);
+    fetchCosts();
+  }, [fetchCosts]);
 
   // Connection status
   const connectionStatus = connected ? "connected" : connecting ? "connecting" : "disconnected";
@@ -244,7 +230,7 @@ export default function CostsPage() {
           variant="secondary"
           size="sm"
           onClick={fetchCosts}
-          disabled={loading || !connected}
+          disabled={loading}
           className="bg-zinc-800 hover:bg-zinc-700"
         >
           <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />

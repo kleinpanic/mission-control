@@ -28,13 +28,13 @@ export function AgentDetail({ agent }: AgentDetailProps) {
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const { connected, request } = useGateway();
 
-  // Fetch sessions for this agent from gateway
+  // Fetch sessions for this agent via HTTP API
   const fetchSessions = useCallback(async () => {
-    if (!connected) return;
-
     setLoadingSessions(true);
     try {
-      const result = await request<any>("sessions.list", { limit: 100 });
+      const res = await fetch("/api/sessions");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const result = await res.json();
       if (result?.sessions) {
         const filtered = result.sessions.filter((s: any) => {
           const parts = (s.key || "").split(":");

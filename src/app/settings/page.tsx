@@ -89,122 +89,74 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function fetchConfig() {
-      if (!connected) {
-        if (!connecting) setLoading(false);
-        return;
-      }
-      
       setLoading(true);
       try {
-        const [agentsResult, statusResult, configResult, _channelsResult, httpChannelsResult] = await Promise.all([
-          request<any>("agents.list").catch(e => { console.error("agents.list error:", e); return null; }),
-          request<any>("status").catch(e => { console.error("status error:", e); return null; }),
-          request<any>("config.get").catch(e => { console.error("config.get error:", e); return null; }),
-          request<any>("channels.status").catch(e => { console.error("channels.status error:", e); return null; }),
-          fetch("/api/channels").then(r => r.json()).catch(e => { console.error("channels API error:", e); return null; }),
+        // Use HTTP APIs exclusively — avoids WS operator.read scope issues
+        // Use AbortController to prevent hanging requests
+        const fetchWithTimeout = (url: string, timeoutMs = 8000) => {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), timeoutMs);
+          return fetch(url, { signal: controller.signal })
+            .then(r => { clearTimeout(timeout); return r.ok ? r.json() : null; })
+            .catch(() => { clearTimeout(timeout); return null; });
+        };
+        
+        const [agentsData, statusData, configData, channelsData] = await Promise.all([
+          fetchWithTimeout("/api/agents"),
+          fetchWithTimeout("/api/status", 5000), // shorter timeout — this one can hang
+          fetchWithTimeout("/api/config"),
+          fetchWithTimeout("/api/channels"),
         ]);
         
-        if (agentsResult || statusResult) {
-          const agents = agentsResult?.agents || [];
-          
-          // Map heartbeat info
-          const heartbeatByAgent = new Map<string, any>();
-          statusResult?.heartbeat?.agents?.forEach((hb: any) => {
-            heartbeatByAgent.set(hb.agentId, hb);
-          });
-          
-          // Extract default model and context from config
-          const defaultModel = configResult?.config?.agents?.defaults?.model?.primary || "anthropic/claude-sonnet-4-5";
-          const contextTokens = configResult?.config?.session?.contextTokens || 200000;
-          
-          // Extract agent models from config
-          const agentConfigs = new Map<string, any>();
-          if (configResult?.config?.agents?.list) {
-            configResult.config.agents.list.forEach((a: any) => {
-              agentConfigs.set(a.id, a.model);
-            });
-          }
-          
-          // Build dynamic model list from config
-          const availableModels: ModelOption[] = [
-            { value: "default", label: `Default (${defaultModel})` },
-          ];
-          
-          // Add models from providers in config
-          const providers = configResult?.config?.models?.providers || {};
-          const seenModels = new Set<string>();
-          for (const [providerId, providerConfig] of Object.entries(providers) as [string, any][]) {
-            for (const model of providerConfig?.models || []) {
-              const fullId = `${providerId}/${model.id}`;
-              if (!seenModels.has(fullId)) {
-                seenModels.add(fullId);
-                availableModels.push({
-                  value: fullId,
-                  label: model.name || `${providerId}/${model.id}`,
-                });
-              }
-            }
-          }
-          
-          // Also add models from agent defaults.models
-          const defaultModels = configResult?.config?.agents?.defaults?.models || {};
-          for (const [modelId, modelConfig] of Object.entries(defaultModels) as [string, any][]) {
-            if (!seenModels.has(modelId)) {
-              seenModels.add(modelId);
-              const alias = modelConfig?.alias ? ` (${modelConfig.alias})` : "";
-              availableModels.push({
-                value: modelId,
-                label: `${modelId}${alias}`,
-              });
-            }
-          }
-          
-          // Also add models from individual agent configs (in case they use a model not in providers list)
-          for (const [, agentModel] of agentConfigs.entries()) {
-            const primary = agentModel?.primary;
-            if (primary && !seenModels.has(primary)) {
-              seenModels.add(primary);
-              availableModels.push({
-                value: primary,
-                label: primary,
-              });
-            }
-          }
-          
-          // Use enriched channel data from HTTP API
-          const channels: ChannelInfo[] = httpChannelsResult?.channels || [];
-          const routing: RoutingEntry[] = httpChannelsResult?.routing || [];
-          
-          setConfig({
-            defaultModel,
-            contextTokens,
-            availableModels,
-            agents: agents.map((a: any) => {
-              const heartbeat = heartbeatByAgent.get(a.id);
-              const agentModelConfig = agentConfigs.get(a.id);
-              const modelPrimary = agentModelConfig?.primary || defaultModel;
-              
-              return {
-                id: a.id,
-                name: a.name,
-                model: modelPrimary,
-                heartbeatInterval: heartbeat?.every || "—",
-              };
-            }),
-            channels,
-            routing,
-          });
-          
-          // Initialize model overrides from config (not runtime agents.list)
-          const overrides: Record<string, string> = {};
-          agents.forEach((a: any) => {
-            const configModel = agentConfigs.get(a.id);
-            const modelPrimary = configModel?.primary;
-            // Show the config-defined model, or "default" if inheriting from defaults
-            overrides[a.id] = modelPrimary || "default";
-          });
-          setModelOverrides(overrides);
-        }
+        const agents = agentsData?.agents || [];
+        const defaultModel = configData?.defaultModel || "anthropic/claude-sonnet-4-5";
+        const contextTokens = configData?.contextTokens || 200000;
+        const availableModels: ModelOption[] = configData?.availableModels || [
+          { value: "default", label: `Default (${defaultModel})` },
+        ];
+        
+        // Map heartbeat info from status
+        const heartbeatByAgent = new Map<string, any>();
+        statusData?.heartbeat?.agents?.forEach((hb: any) => {
+          heartbeatByAgent.set(hb.agentId, hb);
+        });
+        
+        // Map agent models from config endpoint
+        const configAgents = new Map<string, string>();
+        (configData?.agents || []).forEach((a: any) => {
+          configAgents.set(a.id, a.model);
+        });
+        
+        // Use enriched channel data from HTTP API
+        const channels: ChannelInfo[] = channelsData?.channels || [];
+        const routing: RoutingEntry[] = channelsData?.routing || [];
+        
+        setConfig({
+          defaultModel,
+          contextTokens,
+          availableModels,
+          agents: agents.map((a: any) => {
+            const heartbeat = heartbeatByAgent.get(a.id);
+            const modelPrimary = configAgents.get(a.id) || a.model || defaultModel;
+            
+            return {
+              id: a.id,
+              name: a.name || a.id,
+              model: modelPrimary,
+              heartbeatInterval: heartbeat?.every || "—",
+            };
+          }),
+          channels,
+          routing,
+        });
+        
+        // Initialize model overrides
+        const overrides: Record<string, string> = {};
+        agents.forEach((a: any) => {
+          const configModel = configAgents.get(a.id);
+          overrides[a.id] = configModel || "default";
+        });
+        setModelOverrides(overrides);
       } catch (error) {
         console.error("Failed to fetch config:", error);
       } finally {
@@ -212,7 +164,7 @@ export default function SettingsPage() {
       }
     }
     fetchConfig();
-  }, [connected, connecting, request]);
+  }, []);
 
   const handleModelChange = (agentId: string, model: string) => {
     setModelOverrides((prev) => ({
