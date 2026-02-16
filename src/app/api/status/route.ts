@@ -76,26 +76,45 @@ export async function GET() {
       return NextResponse.json(statusCache);
     }
 
-    // Get OpenClaw status - pipe through grep to remove plugin log lines
-    const { stdout: statusJson } = await execAsync(
-      'openclaw status --json 2>/dev/null | grep -v "^\\["',
-      { maxBuffer: 10 * 1024 * 1024 } // 10MB buffer for large outputs
-    );
-
+    // Get OpenClaw status via gateway HTTP API (faster + more reliable than CLI)
+    // Falls back to CLI if HTTP fails
     let statusData: any = {};
+    
+    const gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:18789';
+    const httpUrl = gatewayUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+    const token = process.env.OPENCLAW_GATEWAY_TOKEN || '';
+    
     try {
-      // The output should be valid JSON after removing plugin messages
-      statusData = JSON.parse(statusJson.trim());
-    } catch (parseError) {
-      console.error("Failed to parse status JSON:", parseError, "Raw length:", statusJson.length);
-      // Try to find a JSON object if direct parse fails
-      const jsonMatch = statusJson.match(/^\{[\s\S]*\}$/m);
-      if (jsonMatch) {
-        try {
-          statusData = JSON.parse(jsonMatch[0]);
-        } catch {
-          console.error("Fallback JSON parse also failed");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      
+      const res = await fetch(`${httpUrl}/api/v1/invoke`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ method: 'status' }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      
+      if (res.ok) {
+        const result = await res.json();
+        statusData = result.result || result || {};
+      }
+    } catch {
+      // HTTP API failed — try CLI with strict timeout
+      try {
+        const { stdout: statusJson } = await execAsync(
+          'openclaw status --json 2>/dev/null | grep -v "^\\["',
+          { maxBuffer: 10 * 1024 * 1024, timeout: 5000 }
+        );
+        if (statusJson.trim()) {
+          statusData = JSON.parse(statusJson.trim());
         }
+      } catch {
+        console.error("[status] Both HTTP and CLI failed");
       }
     }
 

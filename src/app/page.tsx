@@ -100,23 +100,26 @@ export default function Dashboard() {
   const { events } = useRealtimeStore();
 
   const fetchData = useCallback(async () => {
-    if (!connected) return;
-    
     setLoading(true);
     try {
-      // Fetch all data in parallel
-      // Note: Prefer HTTP endpoints to avoid WebSocket pairing issues
+      // Fetch all data in parallel via HTTP APIs (no WS dependency)
+      // Use timeouts to prevent any single slow endpoint from blocking the dashboard
+      const fetchSafe = (url: string, timeoutMs = 8000) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        return fetch(url, { signal: controller.signal })
+          .then(r => { clearTimeout(timeout); return r.ok ? r.json() : null; })
+          .catch(() => { clearTimeout(timeout); return null; });
+      };
+
       const [agentsResult, statusResult, costsResult, cronResult, channelsResult, tasksResult, rateLimitsResult] = await Promise.all([
-        // Always prefer HTTP /api/agents (enriched with runtime data: sessions, lastActivity, heartbeat)
-        // WS agents.list only has config data without runtime enrichment
-        fetch("/api/agents").then(r => r.json()).catch(e => { console.error("agents API error:", e); return null; }),
-        fetch("/api/status").then(r => r.json()).catch(e => { console.error("status API error:", e); return null; }),
-        fetch("/api/costs").then(r => r.json()).catch(e => { console.error("costs API error:", e); return null; }),
-        (connected ? request<any>("cron.list").catch(() => null) : Promise.resolve(null))
-          .then(ws => ws || fetch("/api/cron").then(r => r.json()).catch(e => { console.error("cron API error:", e); return null; })),
-        fetch("/api/channels").then(r => r.json()).catch(e => { console.error("channels API error:", e); return null; }),
-        fetch("/api/tasks?status=completed,review&list=agents,shared").then(r => r.json()).catch(e => { console.error("tasks API error:", e); return null; }),
-        fetch("/api/rate-limits").then(r => r.json()).catch(e => { console.error("rate-limits API error:", e); return null; }),
+        fetchSafe("/api/agents"),
+        fetchSafe("/api/status", 5000), // status can hang if gateway is slow
+        fetchSafe("/api/costs"),
+        fetchSafe("/api/cron"),
+        fetchSafe("/api/channels"),
+        fetchSafe("/api/tasks?status=completed,review&list=agents,shared"),
+        fetchSafe("/api/rate-limits"),
       ]);
       
       // Update rate limits state
@@ -214,12 +217,10 @@ export default function Dashboard() {
     }
   }, [connected, request]);
 
-  // Fetch data when connected
+  // Fetch data on mount + when WS connects (for real-time subscription setup)
   useEffect(() => {
-    if (connected) {
-      fetchData();
-    }
-  }, [connected, fetchData]);
+    fetchData();
+  }, [fetchData]);
 
   // Subscribe to real-time events
   useEffect(() => {
@@ -246,24 +247,20 @@ export default function Dashboard() {
 
     // Subscribe to heartbeat events
     const unsubHeartbeat = subscribe("heartbeat", (payload) => {
-      console.log("[Dashboard] Heartbeat event:", payload);
       toast.info(`Heartbeat: ${payload.agentId || "main"}`);
-      // Refresh data after heartbeat
       setTimeout(fetchData, 1000);
     });
 
     // Subscribe to cron events
-    const unsubCron = subscribe("cron", (payload) => {
-      console.log("[Dashboard] Cron event:", payload);
-      // Refresh cron data
-      request<any>("cron.list").then(result => {
-        if (result) setCronJobs(result.jobs || result || []);
+    const unsubCron = subscribe("cron", () => {
+      // Refresh cron data via HTTP
+      fetch("/api/cron").then(r => r.ok ? r.json() : null).then(result => {
+        if (result?.jobs) setCronJobs(result.jobs);
       }).catch(console.error);
     });
 
     // Subscribe to health events
     const unsubHealth = subscribe("health", (payload) => {
-      console.log("[Dashboard] Health event:", payload);
       if (payload.status === "degraded" || payload.status === "unhealthy") {
         toast.warning(`Gateway health: ${payload.status}`);
       }
