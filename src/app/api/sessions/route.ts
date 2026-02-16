@@ -36,11 +36,11 @@ export async function GET(_request: NextRequest) {
 
     // Fetch sessions using openclaw CLI (uses default agent, gets all sessions)
     const { stdout } = await execAsync(
-      'openclaw sessions list --json',
-      { timeout: 15000 }
+      'openclaw sessions --json',
+      { timeout: 10000 }
     );
     
-    const data = JSON.parse(stdout);
+    const data = JSON.parse(stdout || '{"sessions":[]}');
     const allSessions = (data.sessions || []).map((session: RawSession) => {
       // Extract agentId from session key (format: agent:main:...)
       const keyParts = session.key.split(':');
