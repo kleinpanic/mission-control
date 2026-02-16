@@ -447,34 +447,90 @@ export default function Dashboard() {
       </div>
 
       {/* Rate Limits */}
-      {rateLimits && rateLimits.summary?.rateLimited > 0 && (
-        <Card className="bg-zinc-900 border-zinc-800 border-l-4 border-l-amber-500">
+      {rateLimits && (
+        <Card className={cn(
+          "bg-zinc-900 border-zinc-800",
+          rateLimits.summary?.rateLimited > 0 ? "border-l-4 border-l-amber-500" : "border-l-4 border-l-emerald-500"
+        )}>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg text-zinc-100 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-400" />
-              Rate Limits Active
-              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
-                {rateLimits.summary.rateLimited} agent{rateLimits.summary.rateLimited > 1 ? 's' : ''}
-              </Badge>
+              {rateLimits.summary?.rateLimited > 0 ? (
+                <>
+                  <AlertCircle className="w-5 h-5 text-amber-400" />
+                  Rate Limits Active
+                  <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                    {rateLimits.summary.rateLimited} agent{rateLimits.summary.rateLimited > 1 ? 's' : ''}
+                  </Badge>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  Rate Limits
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
+                    All Clear
+                  </Badge>
+                </>
+              )}
             </CardTitle>
+            <CardDescription className="text-zinc-400">
+              {rateLimits.summary?.rateLimited > 0 
+                ? "Providers on cooldown" 
+                : `${rateLimits.summary?.totalAgents || 0} agents monitored • Recent cooldowns shown below`
+              }
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {rateLimits.agents
-                .filter((a: any) => a.hasActiveCooldown)
-                .map((agent: any) => (
-                  <div key={agent.agentId} className="bg-zinc-800/50 rounded-lg p-3 border border-amber-500/20">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold text-zinc-100">{agent.agentName}</span>
-                      <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px]">LIMITED</Badge>
+            {rateLimits.summary?.rateLimited > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {rateLimits.agents
+                  .filter((a: any) => a.hasActiveCooldown)
+                  .map((agent: any) => (
+                    <div key={agent.agentId} className="bg-zinc-800/50 rounded-lg p-3 border border-amber-500/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-zinc-100">{agent.agentName}</span>
+                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px]">LIMITED</Badge>
+                      </div>
+                      <div className="space-y-1">
+                        {agent.cooldowns
+                          .filter((c: any) => c.active)
+                          .map((cooldown: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between text-xs gap-2">
+                              <div className="flex items-center gap-1">
+                                <span className="text-zinc-400 font-mono">{cooldown.provider}</span>
+                                {cooldown.authMode && cooldown.authMode !== 'unknown' && (
+                                  <span className={cn("text-[9px] px-1 rounded",
+                                    cooldown.authMode === 'oauth' ? 'bg-emerald-500/20 text-emerald-400' :
+                                    cooldown.authMode === 'api' || cooldown.authMode === 'token' ? 'bg-amber-500/20 text-amber-400' :
+                                    'bg-zinc-500/20 text-zinc-400'
+                                  )}>
+                                    {cooldown.authMode === 'oauth' ? 'OAuth' : 'API'}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-amber-400">{cooldown.remainingHuman}</span>
+                            </div>
+                          ))}
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      {agent.cooldowns
-                        .filter((c: any) => c.active)
-                        .map((cooldown: any, idx: number) => (
+                  ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Show agents with recent (expired) cooldowns */}
+                {rateLimits.agents
+                  .filter((a: any) => a.cooldowns && a.cooldowns.length > 0)
+                  .slice(0, 6)
+                  .map((agent: any) => (
+                    <div key={agent.agentId} className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-zinc-100">{agent.agentName}</span>
+                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">OK</Badge>
+                      </div>
+                      <div className="space-y-1">
+                        {agent.cooldowns.slice(0, 3).map((cooldown: any, idx: number) => (
                           <div key={idx} className="flex items-center justify-between text-xs gap-2">
                             <div className="flex items-center gap-1">
-                              <span className="text-zinc-400 font-mono">{cooldown.provider}</span>
+                              <span className="text-zinc-400 font-mono text-[11px]">{cooldown.provider}</span>
                               {cooldown.authMode && cooldown.authMode !== 'unknown' && (
                                 <span className={cn("text-[9px] px-1 rounded",
                                   cooldown.authMode === 'oauth' ? 'bg-emerald-500/20 text-emerald-400' :
@@ -485,13 +541,17 @@ export default function Dashboard() {
                                 </span>
                               )}
                             </div>
-                            <span className="text-amber-400">{cooldown.remainingHuman}</span>
+                            <span className="text-zinc-500 text-[11px]">{cooldown.remainingHuman}</span>
                           </div>
                         ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-            </div>
+                  ))}
+                {rateLimits.agents.filter((a: any) => a.cooldowns && a.cooldowns.length > 0).length === 0 && (
+                  <p className="text-zinc-500 text-sm text-center py-4">No cooldown history</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
