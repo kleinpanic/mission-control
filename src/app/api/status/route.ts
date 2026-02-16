@@ -99,22 +99,36 @@ export async function GET() {
       });
       clearTimeout(timeout);
       
-      if (res.ok) {
-        const result = await res.json();
-        statusData = result.result || result || {};
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
-    } catch {
-      // HTTP API failed — try CLI with strict timeout
+      const result = await res.json();
+      statusData = result.result || result || {};
+    } catch (httpError: any) {
+      // HTTP API failed (expected — gateway doesn't have this endpoint), fallback to CLI
       try {
         const { stdout: statusJson } = await execAsync(
-          'openclaw status --json 2>/dev/null | grep -v "^\\["',
-          { maxBuffer: 10 * 1024 * 1024, timeout: 5000 }
+          'openclaw status --json 2>/dev/null',
+          { 
+            maxBuffer: 10 * 1024 * 1024, 
+            timeout: 5000,
+            env: {
+              ...process.env,
+              PATH: `/home/broklein/.local/bin:${process.env.PATH || '/usr/local/bin:/usr/bin:/bin'}`,
+              HOME: process.env.HOME || '/home/broklein',
+            }
+          }
         );
-        if (statusJson.trim()) {
-          statusData = JSON.parse(statusJson.trim());
+        
+        // Extract JSON object from output (skip any non-JSON lines from plugin logs)
+        const lines = statusJson.split('\n');
+        const jsonStart = lines.findIndex(line => line.trim().startsWith('{'));
+        if (jsonStart !== -1) {
+          const jsonText = lines.slice(jsonStart).join('\n');
+          statusData = JSON.parse(jsonText);
         }
-      } catch {
-        console.error("[status] Both HTTP and CLI failed");
+      } catch (cliError: any) {
+        console.error("[status] CLI fallback failed:", cliError.message);
       }
     }
 
