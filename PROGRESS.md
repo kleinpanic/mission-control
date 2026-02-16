@@ -275,13 +275,16 @@ But the primary issue (WebSocket proxy not connecting) is FIXED and VALIDATED.
 
 **Commits:**
 - `c1fdaea` - feat(ui): add velocity dashboard, auto-decompose, and smart assign
-- Pushed to main (a37bfeb..c1fdaea)
+- `d08b7a0` - fix(api): guard personal tasks from dispatch and agent next query
+- Pushed to main (a37bfeb..d08b7a0)
 
 **Testing Required:**
 - [ ] Navigate to /velocity and verify metrics display
 - [ ] Click Auto-Decompose on Kanban, verify scan + decompose flow
 - [ ] Edit task, click Smart Assign, verify recommendation
 - [ ] Verify subtask badge appears on decomposed subtasks
+- [ ] Verify personal tasks cannot be dispatched (dispatch button should show error)
+- [ ] Verify personal tasks do not appear in /api/tasks/next?agent=dev
 - [ ] Verify all sidebar links work
 
 ---

@@ -1,8 +1,10 @@
 // Mission Control - Auto-Decompose API
 // Programmatic endpoint for auto-decomposing tasks based on complexity
+// GUARD: Personal tasks and Klein-assigned tasks are NEVER auto-decomposed
 import { NextRequest, NextResponse } from 'next/server';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import Database from 'better-sqlite3';
 
 const execAsync = promisify(exec);
 const AUTO_DECOMPOSE_HOOK = `${process.env.HOME}/.openclaw/hooks/task-auto-decompose.sh`;
@@ -27,6 +29,30 @@ export async function POST(request: NextRequest) {
         { error: 'Provide taskId or set scan: true' },
         { status: 400 }
       );
+    }
+
+    // GUARD: If specific taskId, verify it's not personal/klein before shelling out
+    if (taskId) {
+      try {
+        const dbPath = `${process.env.HOME}/.openclaw/data/tasks.db`;
+        const db = new Database(dbPath, { readonly: true });
+        const task = db.prepare('SELECT list, assignedTo, title FROM tasks WHERE id = ?').get(taskId) as any;
+        db.close();
+        if (task?.list === 'personal') {
+          return NextResponse.json(
+            { error: `Task "${task.title}" is personal — cannot auto-decompose Klein's tasks.` },
+            { status: 403 }
+          );
+        }
+        if (task?.assignedTo === 'klein') {
+          return NextResponse.json(
+            { error: `Task "${task.title}" is assigned to Klein — cannot auto-decompose.` },
+            { status: 403 }
+          );
+        }
+      } catch (e) {
+        // DB check failed — still let the bash script's guard handle it
+      }
     }
 
     const cmd = scan ? `${AUTO_DECOMPOSE_HOOK} --scan` : `${AUTO_DECOMPOSE_HOOK} "${taskId}"`;
@@ -84,6 +110,8 @@ export async function GET(request: NextRequest) {
         FROM tasks t
         WHERE t.complexity IN ('moderate', 'epic')
         AND t.status IN ('intake', 'ready')
+        AND t.list != 'personal'
+        AND COALESCE(t.assignedTo, '') != 'klein'
         AND NOT EXISTS (SELECT 1 FROM tasks child WHERE child.parentId = t.id)
         AND COALESCE(json_extract(t.metadata, '$.decomposed'), 0) != 1
         ORDER BY 

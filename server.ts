@@ -16,6 +16,7 @@ config({ path: resolve(process.cwd(), ".env") });
 import { createServer } from "http";
 import next from "next";
 import { WebSocketServer, WebSocket } from "ws";
+import { EventEmitter } from "events";
 import { handleSlackMessage } from "./src/lib/slack-tasks-debug";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -28,15 +29,57 @@ const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 const MC_PASSWORD = process.env.MISSION_CONTROL_PASSWORD || "";
 const ALLOWED_ORIGIN = `http://localhost:${port}`;
 
+// Clean up stale dev lock to prevent restart loops
+import { existsSync, unlinkSync } from "fs";
+const lockFile = resolve(process.cwd(), ".next/dev/lock");
+if (existsSync(lockFile)) {
+  try { unlinkSync(lockFile); } catch {}
+}
+
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
+
+// Internal event bus for broadcasting custom events to WebSocket clients
+export const broadcastEmitter = new EventEmitter();
+
+// Track all connected WebSocket clients for broadcasting
+const connectedClients = new Set<WebSocket>();
+
+/**
+ * Broadcast a custom event to all connected WebSocket clients.
+ * Called by API routes to push real-time updates.
+ */
+export function broadcastToClients(event: string, payload: any) {
+  const message = JSON.stringify({
+    type: "event",
+    event,
+    payload,
+  });
+
+  if (dev) console.log(`[Broadcast] ${event} → ${connectedClients.size} clients`);
+
+  connectedClients.forEach((clientWs) => {
+    if (clientWs.readyState === WebSocket.OPEN) {
+      try {
+        clientWs.send(message);
+      } catch (error) {
+        console.error("[Broadcast] Failed to send to client:", error);
+      }
+    }
+  });
+}
+
+// Attach to global for access from API routes
+(global as any).broadcastToClients = broadcastToClients;
 
 /**
  * Create a WebSocket proxy connection handler.
  * Bridges browser clients to the OpenClaw gateway.
  */
 function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?: string; host?: string } }) {
-  console.log("[WS Proxy] Client connected from:", req.headers.origin || "unknown");
+  // Add to connected clients set
+  connectedClients.add(clientWs);
+  if (dev) console.log(`[WS Proxy] Client connected (${connectedClients.size} total)`);
   
   let gatewayClosed = false;
   let clientClosed = false;
@@ -51,7 +94,7 @@ function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?:
   });
 
   gatewayWs.on("open", () => {
-    console.log("[WS Proxy] Gateway connected (Origin:", ALLOWED_ORIGIN + ")");
+    if (dev) console.log("[WS Proxy] Gateway connected");
     gatewayConnected = true;
     for (const msg of pendingToGateway) {
       gatewayWs.send(msg);
@@ -59,34 +102,90 @@ function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?:
     pendingToGateway = [];
   });
 
-  // Gateway -> Client
+  // Events the UI actually subscribes to — everything else is dropped.
+  // This prevents the browser from drowning in agent.thinking / chat stream events.
+  const UI_RELEVANT_EVENTS = new Set([
+    "connect.challenge",
+    "agent",           // agent run start/end (dashboard, sessions)
+    "session",         // session lifecycle (sessions page)
+    "cron",            // cron state changes (cron page)
+    "cron.run",
+    "task",            // task mutations (kanban)
+    "task.update",
+    "approval",        // approvals page
+    "cost",            // cost events (dashboard)
+    "message.channel", // Slack integration
+    "health",          // connection keepalive
+  ]);
+
+  // Rate-limit: max 1 event per type per 500ms to prevent render floods
+  const lastEventTime = new Map<string, number>();
+  const EVENT_THROTTLE_MS = 500;
+
+  // Gateway -> Client (with filtering + throttling)
   gatewayWs.on("message", (data) => {
     const str = data.toString();
-    console.log("[WS Proxy] Gateway ->", str.substring(0, 80));
-    
-    if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(str);
-    }
 
-    // Slack integration: auto-create tasks from Slack messages
     try {
       const msg = JSON.parse(str);
-      if (msg.type === "event" && msg.event === "message.channel") {
-        handleSlackMessage(msg.payload);
+
+      // Always forward responses (req/res pairs)
+      if (msg.type === "res") {
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(str);
+        }
+        return;
       }
-    } catch {}
+
+      // Filter events: only forward UI-relevant ones
+      if (msg.type === "event") {
+        const eventName: string = msg.event || "";
+
+        // Slack integration hook (runs regardless of forwarding)
+        if (eventName === "message.channel") {
+          handleSlackMessage(msg.payload);
+        }
+
+        // Drop events the UI doesn't care about
+        if (!UI_RELEVANT_EVENTS.has(eventName)) {
+          return;
+        }
+
+        // Throttle: skip duplicate event types within the cooldown window
+        const now = Date.now();
+        const lastSent = lastEventTime.get(eventName) || 0;
+        if (now - lastSent < EVENT_THROTTLE_MS && eventName !== "connect.challenge") {
+          return;
+        }
+        lastEventTime.set(eventName, now);
+
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(str);
+        }
+        return;
+      }
+
+      // Unknown message types: forward as-is (safety net)
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(str);
+      }
+    } catch {
+      // Not valid JSON — forward raw
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(str);
+      }
+    }
   });
 
   // Client -> Gateway
   clientWs.on("message", (data) => {
     const str = data.toString();
-    console.log("[WS Proxy] Client ->", str.substring(0, 80));
 
     try {
       const msg = JSON.parse(str);
 
       if (msg.type === "req" && msg.method === "connect") {
-        console.log("[WS Proxy] Intercepting connect, injecting token");
+        if (dev) console.log("[WS Proxy] Injecting gateway token");
         
         // Check MC password if configured
         if (MC_PASSWORD) {
@@ -128,18 +227,20 @@ function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?:
 
   clientWs.on("close", (code) => {
     clientClosed = true;
-    console.log("[WS Proxy] Client closed:", code);
+    connectedClients.delete(clientWs);
+    if (dev) console.log(`[WS Proxy] Client closed: ${code} (${connectedClients.size} remaining)`);
     if (!gatewayClosed) gatewayWs.close();
   });
 
   gatewayWs.on("close", (code) => {
     gatewayClosed = true;
-    console.log("[WS Proxy] Gateway closed:", code);
+    if (dev) console.log("[WS Proxy] Gateway closed:", code);
     if (!clientClosed && clientWs.readyState === WebSocket.OPEN) clientWs.close();
   });
 
   clientWs.on("error", (e) => {
     console.error("[WS Proxy] Client error:", e.message);
+    connectedClients.delete(clientWs);
     if (!gatewayClosed) gatewayWs.close();
   });
 

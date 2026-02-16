@@ -46,9 +46,17 @@ export default function VelocityPage() {
   const fetchVelocity = async () => {
     try {
       const res = await fetch("/api/tasks/velocity");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
+      if (result.error) throw new Error(result.error);
       if (result.velocity) {
-        setData(result.velocity);
+        // Ensure agents array exists (even if empty)
+        const velocity = {
+          agents: result.velocity.agents || [],
+          trends: result.velocity.trends || [],
+          updated: result.velocity.updated || new Date().toISOString(),
+        };
+        setData(velocity);
       }
     } catch (error) {
       console.error("Failed to fetch velocity data:", error);
@@ -110,9 +118,11 @@ export default function VelocityPage() {
     );
   }
 
-  const topPerformer = data.agents.reduce((best, agent) =>
-    agent.velocity_score > best.velocity_score ? agent : best
-  , data.agents[0]);
+  const topPerformer = data.agents.length > 0
+    ? data.agents.reduce((best, agent) =>
+        agent.velocity_score > best.velocity_score ? agent : best
+      , data.agents[0])
+    : null;
 
   return (
     <div className="space-y-6">

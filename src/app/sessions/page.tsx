@@ -17,36 +17,29 @@ export default function SessionsPage() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  const { connected, connecting, request, subscribe } = useGateway();
+  const { connected, connecting, subscribe } = useGateway();
 
+  // Fetch sessions via HTTP API (avoids operator.read scope requirement)
   const fetchSessions = useCallback(async () => {
-    if (!connected) return;
-    
     setLoading(true);
     setError(null);
     try {
-      const result = await request<{ sessions: Session[] }>("sessions.list", { 
-        limit: 100
-      });
+      const res = await fetch("/api/sessions");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
       
-      if (result?.sessions) {
-        // Normalize sessions data from raw gateway format if needed
-        const normalized = result.sessions.map(s => {
-          if (!s.tokens && ((s as any).totalTokens !== undefined || (s as any).inputTokens !== undefined)) {
-            const used = (s as any).totalTokens ?? (((s as any).inputTokens || 0) + ((s as any).outputTokens || 0));
-            const limit = (s as any).contextTokens ?? 200000;
-            return {
-              ...s,
-              tokens: {
-                used,
-                limit,
-                input: (s as any).inputTokens || 0,
-                output: (s as any).outputTokens || 0
-              }
-            };
-          }
-          return s;
-        });
+      if (data.sessions) {
+        // Normalize from CLI format to our Session type
+        const normalized = data.sessions.map((s: any) => ({
+          ...s,
+          key: s.key || s.sessionKey,
+          tokens: s.tokens || {
+            used: s.totalTokens ?? ((s.inputTokens || 0) + (s.outputTokens || 0)),
+            limit: s.contextTokens ?? 200000,
+            input: s.inputTokens || 0,
+            output: s.outputTokens || 0,
+          },
+        }));
         setSessions(normalized);
       }
     } catch (err) {
@@ -55,31 +48,25 @@ export default function SessionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [connected, request, setSessions, setLoading]);
+  }, [setSessions, setLoading]);
 
-  // Fetch sessions when connected
+  // Fetch on mount
   useEffect(() => {
-    if (connected) {
-      fetchSessions();
-    }
-  }, [connected, fetchSessions]);
+    fetchSessions();
+  }, [fetchSessions]);
 
-  // Subscribe to session events for live updates
+  // Subscribe to session/agent events for live refresh (if WS connected)
   useEffect(() => {
     if (!connected) return;
 
-    // Subscribe to agent events (sessions change when agents run)
     const unsubAgent = subscribe("agent", (payload) => {
-      // Refresh sessions when agent activity happens
       if (payload.event === "run.end" || payload.event === "run.start") {
-        setTimeout(fetchSessions, 500);
+        setTimeout(fetchSessions, 1000);
       }
     });
 
-    // Subscribe to session events if available
-    const unsubSession = subscribe("session", (payload) => {
-      console.log("[Sessions] Session event:", payload);
-      fetchSessions();
+    const unsubSession = subscribe("session", () => {
+      setTimeout(fetchSessions, 500);
     });
 
     return () => {
@@ -96,7 +83,6 @@ export default function SessionsPage() {
     setSelectedSession(null);
   };
 
-  // Connection status indicator
   const connectionStatus = connected ? "connected" : connecting ? "connecting" : "disconnected";
 
   return (
@@ -104,7 +90,6 @@ export default function SessionsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-zinc-100">Sessions</h1>
-          {/* Connection indicator */}
           <Badge
             variant="outline"
             className={cn(
@@ -134,7 +119,7 @@ export default function SessionsPage() {
           variant="secondary"
           size="sm"
           onClick={fetchSessions}
-          disabled={loading || !connected}
+          disabled={loading}
           className="bg-zinc-800 hover:bg-zinc-700"
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
@@ -145,12 +130,6 @@ export default function SessionsPage() {
       {error && (
         <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 text-red-400">
           {error}
-        </div>
-      )}
-
-      {!connected && !connecting && (
-        <div className="bg-yellow-900/20 border border-yellow-800 rounded-lg p-4 text-yellow-400">
-          Not connected to gateway. Session actions are disabled.
         </div>
       )}
 

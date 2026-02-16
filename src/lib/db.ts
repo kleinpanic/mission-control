@@ -24,6 +24,15 @@ export function getDb(): Database.Database {
 
 // ===== CRUD Operations =====
 
+/**
+ * Broadcast an event if the custom server's broadcast function is available.
+ */
+function broadcast(event: string, payload: any) {
+  if ((global as any).broadcastToClients) {
+    (global as any).broadcastToClients(event, payload);
+  }
+}
+
 export function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Task {
   const db = getDb();
   const id = crypto.randomUUID();
@@ -94,6 +103,8 @@ export function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): 
     newTask.source || 'ui',
     newTask.metadata ? JSON.stringify(newTask.metadata) : '{}'
   );
+
+  broadcast('task.created', { task: newTask });
 
   return newTask;
 }
@@ -244,6 +255,8 @@ export function updateTask(id: string, updates: Partial<Task>): Task | null {
     id
   );
 
+  broadcast('task.updated', { task: updated });
+
   return updated;
 }
 
@@ -251,6 +264,11 @@ export function deleteTask(id: string): boolean {
   const db = getDb();
   const stmt = db.prepare('DELETE FROM tasks WHERE id = ?');
   const result = stmt.run(id);
+  
+  if (result.changes > 0) {
+    broadcast('task.deleted', { id });
+  }
+
   return result.changes > 0;
 }
 

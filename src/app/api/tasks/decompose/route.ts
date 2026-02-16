@@ -27,6 +27,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
+    // GUARD: Never decompose personal tasks — Klein-only
+    if (task.list === 'personal') {
+      return NextResponse.json(
+        { error: `Task "${task.title}" is in Klein's personal list. Personal tasks cannot be auto-decomposed by agents.` },
+        { status: 403 }
+      );
+    }
+
+    // GUARD: Never decompose tasks assigned to klein
+    if (task.assignedTo === 'klein') {
+      return NextResponse.json(
+        { error: `Task "${task.title}" is assigned to Klein. Cannot auto-decompose Klein's tasks.` },
+        { status: 403 }
+      );
+    }
+
     // Use LLM to decompose the task
     const decomposition = await decomposeTaskWithLLM(task, model);
 
