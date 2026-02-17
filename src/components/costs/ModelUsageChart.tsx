@@ -28,25 +28,9 @@ const COLORS = [
   "#f97316", // orange-500
 ];
 
-const formatCost = (value: number) => `$${value.toFixed(4)}`;
-
-const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 shadow-lg">
-        <p className="text-xs text-zinc-400 mb-1">
-          {payload[0].payload.fullName || payload[0].payload.name}
-        </p>
-        <p className="text-sm font-bold text-emerald-400">
-          {formatCost(payload[0].value)}
-        </p>
-      </div>
-    );
-  }
-  return null;
-};
-
 export function ModelUsageChart({ byModel, byAgent }: ModelUsageChartProps) {
+  const formatCost = (value: number) => `$${value.toFixed(4)}`;
+
   const modelData = Object.entries(byModel)
     .map(([model, cost]) => ({
       name: model.split("/").pop() || model, // Show just model name, not provider/model
@@ -63,7 +47,23 @@ export function ModelUsageChart({ byModel, byAgent }: ModelUsageChartProps) {
     }))
     .sort((a, b) => b.cost - a.cost);
 
-  const _renderPieLabel = (entry: { name: string; cost: number }) => {
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 shadow-lg">
+          <p className="text-xs text-zinc-400 mb-1">
+            {payload[0].payload.fullName || payload[0].payload.name}
+          </p>
+          <p className="text-sm font-bold text-emerald-400">
+            {formatCost(payload[0].value)}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const _renderPieLabel = (entry: any) => {
     const percent = ((entry.cost / Object.values(byModel).reduce((a, b) => a + b, 0)) * 100).toFixed(1);
     return `${entry.name}: ${percent}%`;
   };

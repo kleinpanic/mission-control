@@ -175,15 +175,8 @@ export function BudgetAlerts({
   // Load config from localStorage on mount
   useEffect(() => {
     const loaded = loadConfig();
-    setConfig((prev) => {
-      // only update if different from current state
-      if (JSON.stringify(prev) === JSON.stringify(loaded)) return prev;
-      return loaded;
-    });
-    setDraft((prev) => {
-      if (JSON.stringify(prev) === JSON.stringify(loaded)) return prev;
-      return loaded;
-    });
+    setConfig(loaded);
+    setDraft(loaded);
   }, []);
 
   const handleSave = useCallback(() => {

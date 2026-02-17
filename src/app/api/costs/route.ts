@@ -42,7 +42,7 @@ interface NormalizedEntry {
 }
 
 // Cache costs for 5 minutes
-let cachedCosts: Record<string, unknown> | null = null;
+let cachedCosts: any = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -75,14 +75,14 @@ export async function GET(_request: NextRequest) {
     // Try to get detailed JSON data (may fail for some providers)
     let providers: CodexbarProviderData[] = [];
     try {
-      const { stdout } = await execAsync(
+      const { stdout, stderr } = await execAsync(
         'codexbar cost --format json --provider all --pretty 2>/dev/null || codexbar cost --format json --pretty 2>/dev/null || echo "[]"',
         { timeout: 10000, shell: '/bin/bash' }
       );
       if (stdout.trim() && stdout.trim() !== '[]') {
-        providers = JSON.parse(stdout) as CodexbarProviderData[];
+        providers = JSON.parse(stdout);
       }
-    } catch {
+    } catch (jsonError) {
       console.warn('Failed to fetch JSON cost data, using text summary only');
     }
     
@@ -137,7 +137,7 @@ export async function GET(_request: NextRequest) {
 
         // Calculate day cost from modelBreakdowns if totalCost is missing
         const dayCost = day.totalCost ?? 
-          day.modelBreakdowns.reduce((sum: number, m: { cost: number }) => sum + (m.cost || 0), 0);
+          day.modelBreakdowns.reduce((sum: number, m: any) => sum + (m.cost || 0), 0);
 
         // Time-based aggregation
         if (dayDate === todayStr) {

@@ -1,104 +1,196 @@
-// Mission Control - Core Types
+// Mission Control - TypeScript Type Definitions
 
-export type TaskStatus = 'todo' | 'in-progress' | 'review' | 'completed' | 'blocked' | 'archived' | 'intake' | 'ready' | 'in_progress' | 'backlog' | 'paused';
-export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
-export type TaskType = 'task' | 'feature' | 'bug' | 'research' | 'maintenance' | 'manual' | 'auto' | 'sync';
+// ===== Agent Types =====
 
-export interface Task {
-  id: string;
-  title: string;
-  description: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  type: TaskType;
-  complexity: any;
-  danger: any;
-  assignedTo: string | null;
-  list: string;
-  tags: string[];
-  metadata: any;
-  dueDate: string | null;
-  estimatedMinutes: number | null;
-  actualMinutes?: number | null;
-  parentId: string | null;
-  projectId: string | null;
-  createdAt: string;
-  updatedAt: string;
-  statusChangedAt: string;
-  completedAt?: string | null;
-  backburnered: boolean;
-  [key: string]: any;
-}
+export type AgentStatus = 'active' | 'idle' | 'waiting' | 'error';
 
 export interface Agent {
   id: string;
   name: string;
-  creature: string;
-  vibe: string;
-  emoji: string;
-  avatar?: string;
-  enabled: boolean;
-  status: any;
-  lastActivity?: string;
-  lastActivityAge?: string;
-  sessions: number;
-  [key: string]: any;
+  status: AgentStatus;
+  model: string | null;
+  authMode?: string; // "oauth" | "api" | "token" | "local" | "unknown"
+  lastActivity: string | null;
+  activeSession: string | null;
+  heartbeatNext: string | null;
+  heartbeatOverdue: boolean;
+  activeSessions?: number;
+  tokenLimited?: boolean;
+  rateLimited?: boolean;
+  contextUsagePercent?: number;
 }
 
-export interface Message {
-  role: any;
-  content: string;
-  timestamp: string;
-  tokens?: number;
-  [key: string]: any;
-}
+// ===== Session Types =====
 
 export interface Session {
   key: string;
-  kind: string;
-  agentId: string;
-  model: string;
-  tokens: any;
-  percentUsed: number;
-  lastActivity: string;
-  compactionCount: number;
-  sessionId: string;
-  flags: string[];
-  canCompact: boolean;
-  compactionStatus: any;
-  [key: string]: any;
+  kind?: 'direct' | 'group' | 'isolated';
+  agentId?: string;
+  model?: string;
+  tokens?: {
+    used: number;
+    limit: number;
+    input?: number;
+    output?: number;
+    cached?: number;
+  };
+  cost?: {
+    input: number;
+    output: number;
+    total: number;
+  };
+  lastActivity?: string;
+  compactions?: number;
+  thinking?: string;
+  startedAt?: string;
+  messages?: Message[];
 }
 
-export type ConnectionStatus = any;
+export interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  toolCalls?: ToolCall[];
+}
+
+export interface ToolCall {
+  name: string;
+  arguments: Record<string, any>;
+  result?: any;
+}
+
+// ===== Cron Types =====
+
+export type CronJobStatus = 'active' | 'disabled' | 'error';
+
+export interface CronJob {
+  id: string;
+  name: string;
+  status: CronJobStatus;
+  schedule: {
+    kind: 'at' | 'every' | 'cron';
+    expr?: string;
+    everyMs?: number;
+    anchorMs?: number;
+    at?: string;
+    tz?: string;
+  };
+  payload: {
+    kind: 'systemEvent' | 'agentTurn';
+    text?: string;
+    message?: string;
+  };
+  sessionTarget: 'main' | 'isolated';
+  nextRun: string | null;
+  lastRun?: {
+    timestamp: string;
+    status: 'success' | 'failure';
+    error?: string;
+  };
+  enabled: boolean;
+}
+
+// ===== Task Types (Kanban — shared with oc-tasks) =====
+
+export type TaskStatus = 'intake' | 'ready' | 'backlog' | 'in_progress' | 'review' | 'paused' | 'blocked' | 'completed' | 'archived';
+export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
+export type TaskComplexity = 'trivial' | 'simple' | 'moderate' | 'complex' | 'epic';
+export type TaskDanger = 'safe' | 'low' | 'medium' | 'high' | 'critical';
+export type TaskType = 'manual' | 'auto' | 'sync';
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  complexity?: TaskComplexity;
+  danger?: TaskDanger;
+  type: TaskType;
+  assignedTo: string | null;
+  list?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  statusChangedAt?: string;
+  tags: string[];
+  metadata?: Record<string, any>;
+  detailScore?: number;
+  minDetailRequired?: number;
+  autoBackburnered?: boolean;
+  slaBreached?: boolean;
+  blockedBy?: string[];
+  blockerDescription?: string;
+  dueDate?: string | null;
+  estimatedMinutes?: number | null;
+  actualMinutes?: number;
+  parentId?: string | null;
+  projectId?: string | null;
+  source?: string;
+  recommendedModel?: string | null;
+  reminderId?: string | null;
+  reminderList?: string | null;
+  reminderSyncedAt?: string | null;
+}
+
+// ===== Cost Types =====
+
+export interface CostData {
+  provider: string;
+  model: string;
+  input: {
+    tokens: number;
+    cost: number;
+  };
+  output: {
+    tokens: number;
+    cost: number;
+  };
+  total: {
+    tokens: number;
+    cost: number;
+  };
+  timestamp: string;
+}
+
+export interface CostSummary {
+  today: number;
+  week: number;
+  month: number;
+  byProvider: Record<string, number>;
+  byModel: Record<string, number>;
+}
+
+// ===== Event Types =====
+
+export type EventType =
+  | 'agent.run.start'
+  | 'agent.run.end'
+  | 'session.message'
+  | 'cron.job.run'
+  | 'cron.job.end'
+  | 'session.created'
+  | 'session.ended'
+  | 'error';
 
 export interface Event {
-  type: any;
-  event: string;
-  payload: any;
-  [key: string]: any;
+  type: EventType;
+  timestamp: string;
+  agentId?: string;
+  sessionKey?: string;
+  data: Record<string, any>;
 }
 
-// Gateway Types (matching openclaw-gateway)
-export interface ToolCall {
-  id: string;
-  tool: string;
-  arguments: any;
-  result?: any;
-  error?: string;
-}
+// ===== Gateway Types =====
 
 export interface GatewayRequest {
-  type: 'req';
   id: string;
   method: string;
-  params: any;
-  metadata?: any;
+  params?: Record<string, any>;
 }
 
 export interface GatewayResponse {
-  type: 'res';
   id: string;
-  ok: boolean;
   result?: any;
   error?: {
     code: number;
@@ -108,32 +200,36 @@ export interface GatewayResponse {
 }
 
 export interface GatewayEvent {
-  type: 'event';
-  event: string;
-  payload: any;
-  data?: any;
-  metadata?: any;
+  type: EventType;
+  data: Record<string, any>;
 }
 
-export interface CronJob {
-  id: string;
-  name: string;
-  status: any;
-  schedule: any;
-  payload: any;
-  sessionTarget: string;
-  enabled: boolean;
-  nextRun: string | null;
-  lastRun?: any;
-  [key: string]: any;
+// ===== Dashboard Types =====
+
+export interface DashboardStats {
+  activeAgents: number;
+  totalSessions: number;
+  todayCost: number;
+  nextHeartbeat: {
+    agentId: string;
+    time: string;
+  } | null;
+  recentEvents: Event[];
+  quickStats: {
+    tokensToday: number;
+    mostActiveAgent: string | null;
+    cronJobsToday: number;
+    errorsToday: number;
+  };
 }
 
-export interface TaskComplexity {
-  id: number;
-  label: string;
-}
+// ===== WebSocket Connection Types =====
 
-export interface TaskDanger {
-  id: number;
-  label: string;
+export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+
+export interface ConnectionState {
+  status: ConnectionStatus;
+  error?: string;
+  reconnectAttempts: number;
+  lastPing?: string;
 }
