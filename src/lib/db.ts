@@ -27,9 +27,9 @@ export function getDb(): Database.Database {
 /**
  * Broadcast an event if the custom server's broadcast function is available.
  */
-function broadcast(event: string, payload: any) {
-  if ((global as any).broadcastToClients) {
-    (global as any).broadcastToClients(event, payload);
+function broadcast(event: string, payload: unknown) {
+  if ((global as { broadcastToClients?: (e: string, p: unknown) => void }).broadcastToClients) {
+    (global as { broadcastToClients: (e: string, p: unknown) => void }).broadcastToClients(event, payload);
   }
 }
 
@@ -121,7 +121,7 @@ export function getTasks(filters?: {
 }): Task[] {
   const db = getDb();
   let query = 'SELECT * FROM tasks WHERE 1=1';
-  const params: any[] = [];
+  const params: (string | number | null)[] = [];
 
   if (filters?.status) {
     if (Array.isArray(filters.status)) {
@@ -187,7 +187,7 @@ export function getTasks(filters?: {
   }
 
   const stmt = db.prepare(query);
-  const rows = stmt.all(...params) as any[];
+  const rows = stmt.all(...params) as Record<string, unknown>[];
 
   return rows.map(rowToTask);
 }
@@ -195,7 +195,7 @@ export function getTasks(filters?: {
 export function getTask(id: string): Task | null {
   const db = getDb();
   const stmt = db.prepare('SELECT * FROM tasks WHERE id = ?');
-  const row = stmt.get(id) as any;
+  const row = stmt.get(id) as Record<string, unknown> | undefined;
 
   return row ? rowToTask(row) : null;
 }
@@ -274,36 +274,36 @@ export function deleteTask(id: string): boolean {
 
 // ===== Helper Functions =====
 
-function rowToTask(row: any): Task {
+function rowToTask(row: Record<string, unknown>): Task {
   return {
-    id: row.id,
-    title: row.title,
-    description: row.description || undefined,
+    id: row.id as string,
+    title: row.title as string,
+    description: (row.description as string) || undefined,
     status: row.status as TaskStatus,
     priority: row.priority as TaskPriority,
-    complexity: row.complexity || 'simple',
-    danger: row.danger || 'safe',
+    complexity: (row.complexity as string) || 'simple',
+    danger: (row.danger as string) || 'safe',
     type: row.type as TaskType,
-    assignedTo: row.assignedTo || null,
-    list: row.list || 'agents',
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    completedAt: row.completedAt || undefined,
-    statusChangedAt: row.statusChangedAt || row.updatedAt,
-    tags: JSON.parse(row.tags || '[]') as string[],
-    metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-    detailScore: row.detailScore || 0,
-    minDetailRequired: row.minDetailRequired || 0,
+    assignedTo: (row.assignedTo as string) || null,
+    list: (row.list as string) || 'agents',
+    createdAt: row.createdAt as string,
+    updatedAt: row.updatedAt as string,
+    completedAt: (row.completedAt as string) || undefined,
+    statusChangedAt: (row.statusChangedAt as string) || (row.updatedAt as string),
+    tags: JSON.parse((row.tags as string) || '[]') as string[],
+    metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
+    detailScore: (row.detailScore as number) || 0,
+    minDetailRequired: (row.minDetailRequired as number) || 0,
     autoBackburnered: !!row.autoBackburnered,
     slaBreached: !!row.slaBreached,
-    blockedBy: JSON.parse(row.blockedBy || '[]'),
-    blockerDescription: row.blockerDescription || '',
-    dueDate: row.dueDate || null,
-    estimatedMinutes: row.estimatedMinutes || null,
-    actualMinutes: row.actualMinutes || 0,
-    parentId: row.parentId || null,
-    projectId: row.projectId || null,
-    source: row.source || 'ui',
+    blockedBy: JSON.parse((row.blockedBy as string) || '[]') as string[],
+    blockerDescription: (row.blockerDescription as string) || '',
+    dueDate: (row.dueDate as string) || null,
+    estimatedMinutes: (row.estimatedMinutes as number) || null,
+    actualMinutes: (row.actualMinutes as number) || 0,
+    parentId: (row.parentId as string) || null,
+    projectId: (row.projectId as string) || null,
+    source: (row.source as string) || 'ui',
   };
 }
 
