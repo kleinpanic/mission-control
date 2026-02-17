@@ -36,37 +36,37 @@ export function AgentDetail({ agent }: AgentDetailProps) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
       if (result?.sessions) {
-        const filtered = result.sessions.filter((s: any) => {
+        const filtered = (result.sessions as Record<string, any>[]).filter((s) => {
           const parts = (s.key || "").split(":");
           const sessionAgentId = s.agentId || parts[1] || "";
           return sessionAgentId === agent.id;
         });
 
         // Normalize token data
-        const normalized = filtered.map((s: any) => {
+        const normalized = filtered.map((s) => {
           if (
             !s.tokens &&
-            ((s as any).totalTokens !== undefined ||
-              (s as any).inputTokens !== undefined)
+            (s.totalTokens !== undefined ||
+              s.inputTokens !== undefined)
           ) {
             const used =
-              (s as any).totalTokens ??
-              ((s as any).inputTokens || 0) + ((s as any).outputTokens || 0);
-            const limit = (s as any).contextTokens ?? 200000;
+              s.totalTokens ??
+              (s.inputTokens || 0) + (s.outputTokens || 0);
+            const limit = s.contextTokens ?? 200000;
             return {
               ...s,
               tokens: {
                 used,
                 limit,
-                input: (s as any).inputTokens || 0,
-                output: (s as any).outputTokens || 0,
+                input: s.inputTokens || 0,
+                output: s.outputTokens || 0,
               },
             };
           }
           return s;
         });
 
-        setAgentSessions(normalized);
+        setAgentSessions(normalized as Session[]);
       }
     } catch (err) {
       console.error("Failed to fetch sessions for agent:", err);

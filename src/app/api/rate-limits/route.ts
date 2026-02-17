@@ -45,16 +45,17 @@ export async function GET() {
       }
       // Extract auth modes from auth.profiles
       for (const [, profile] of Object.entries(config.auth?.profiles || {})) {
-        const p = profile as any;
+        const p = profile as Record<string, unknown>;
         if (p.provider && p.mode) {
-          providerAuthModes.set(p.provider, p.mode);
+          providerAuthModes.set(p.provider as string, p.mode as string);
         }
       }
       // Infer from model providers
       for (const [providerId, pc] of Object.entries(config.models?.providers || {})) {
         if (providerAuthModes.has(providerId)) continue;
-        const conf = pc as any;
-        if (conf.baseUrl?.includes('localhost') || conf.baseUrl?.includes('127.0.0.1')) {
+        const conf = pc as Record<string, unknown>;
+        const baseUrl = conf.baseUrl as string | undefined;
+        if (baseUrl?.includes('localhost') || baseUrl?.includes('127.0.0.1')) {
           providerAuthModes.set(providerId, 'local');
         } else if (conf.apiKey) {
           providerAuthModes.set(providerId, 'api');
@@ -83,8 +84,8 @@ export async function GET() {
         for (const [providerKey, value] of Object.entries(usageStats)) {
           let cooldownUntil: number | null = null;
 
-          if (typeof value === 'object' && value !== null && 'cooldownUntil' in (value as any)) {
-            cooldownUntil = (value as any).cooldownUntil;
+          if (typeof value === 'object' && value !== null && 'cooldownUntil' in (value as Record<string, unknown>)) {
+            cooldownUntil = (value as { cooldownUntil: number }).cooldownUntil;
           } else if (typeof value === 'number' && value > 1700000000000) {
             // Direct timestamp value
             cooldownUntil = value;

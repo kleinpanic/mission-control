@@ -13,19 +13,17 @@ interface QuickStatsData {
 }
 
 export function QuickStats() {
-  const [stats, setStats] = useState<QuickStatsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<QuickStatsData | null>({
+    tokensToday: 0,
+    mostActiveAgent: "dev",
+    cronJobsToday: 0,
+    errorsToday: 0,
+  });
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // TODO: Fetch from API
-    // For now, use placeholder data
-    setStats({
-      tokensToday: 0,
-      mostActiveAgent: "dev",
-      cronJobsToday: 0,
-      errorsToday: 0,
-    });
-    setLoading(false);
+    // TODO: Fetch from actual API when endpoint is available
+    // setStats(...)
   }, []);
 
   if (loading) {
@@ -63,7 +61,7 @@ export function QuickStats() {
       label: "Errors (24h)",
       value: stats?.errorsToday.toString() || "0",
       icon: AlertTriangle,
-      warning: stats?.errorsToday && stats.errorsToday > 0,
+      warning: (stats?.errorsToday ?? 0) > 0,
     },
   ];
 

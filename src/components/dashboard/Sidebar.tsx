@@ -41,8 +41,8 @@ export function Sidebar() {
 
   // Close mobile sidebar on route change
   useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+    if (mobileOpen) setMobileOpen(false);
+  }, [pathname, mobileOpen]);
 
   // Close on escape
   useEffect(() => {

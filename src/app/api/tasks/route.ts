@@ -1,7 +1,7 @@
 // Mission Control - Tasks API (shared database with oc-tasks)
 import { NextRequest, NextResponse } from 'next/server';
 import { createTask, getTasks, updateTask, deleteTask } from '@/lib/db';
-import { TaskStatus, TaskPriority, TaskType } from '@/types';
+import { TaskStatus, TaskPriority, TaskType, Task } from '@/types';
 import { logTaskActivity } from '@/lib/taskActivity';
 import { CreateTaskSchema, UpdateTaskSchema, validateRequest } from '@/lib/validation';
 
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : undefined;
     const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!, 10) : 0;
 
-    const filters: any = {};
+    const filters: Record<string, unknown> = {};
 
     // Support comma-separated statuses
     if (status) {
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       : allTasks;
     
     // Return with pagination metadata
-    const response: any = { tasks };
+    const response: Record<string, unknown> = { tasks };
     if (limit !== undefined) {
       response.pagination = {
         total,
@@ -92,13 +92,14 @@ export async function POST(request: NextRequest) {
       complexity: data.complexity,
       danger: data.danger,
       assignedTo: data.assignedTo || null,
-      list: data.list,
-      tags: data.tags,
-      metadata: data.metadata,
+      list: data.list || 'shared',
+      tags: data.tags || [],
+      metadata: data.metadata || {},
       dueDate: data.dueDate || null,
       estimatedMinutes: data.estimatedMinutes || null,
       parentId: data.parentId || null,
       projectId: data.projectId || null,
+      backburnered: false,
     });
 
     // Log creation activity
@@ -130,7 +131,7 @@ export async function PATCH(request: NextRequest) {
     const { id, ...updates } = validation.data;
 
     // Get old task for activity logging
-    const oldTasks = getTasks({ status: undefined as any });
+    const oldTasks = getTasks({ status: undefined as unknown as TaskStatus });
     const oldTask = oldTasks.find(t => t.id === id);
     
     if (!oldTask) {
@@ -140,7 +141,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const task = updateTask(id, updates);
+    const task = updateTask(id, updates as Partial<Task>);
 
     if (!task) {
       return NextResponse.json(

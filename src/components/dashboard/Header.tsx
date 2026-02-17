@@ -7,10 +7,12 @@ import { cn } from '@/lib/utils';
 
 export function Header() {
   const { connectionStatus } = useRealtimeStore();
+  const [mounted, setMounted] = useState(false);
   const [currentTime, setCurrentTime] = useState<string>('');
 
   // Update time only on client to avoid hydration mismatch
   useEffect(() => {
+    setMounted(true);
     setCurrentTime(new Date().toLocaleString());
     const interval = setInterval(() => {
       setCurrentTime(new Date().toLocaleString());
@@ -43,9 +45,11 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
-        <span className="text-xs md:text-sm text-muted-foreground hidden sm:block" suppressHydrationWarning>
-          {currentTime}
-        </span>
+        {mounted && (
+          <span className="text-xs md:text-sm text-muted-foreground hidden sm:block" suppressHydrationWarning>
+            {currentTime}
+          </span>
+        )}
       </div>
     </header>
   );

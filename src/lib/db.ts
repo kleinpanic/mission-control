@@ -1,115 +1,43 @@
-// Mission Control - SQLite Database (Shared with oc-tasks)
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { homedir } from 'os';
-import { Task, TaskStatus, TaskPriority, TaskType } from '@/types';
+import { Task, TaskStatus, TaskPriority, TaskType } from '../types';
+import { broadcastToClients } from '../../server';
 
-// Use shared database — single source of truth for all task systems
-function getDbPath(): string {
-  return process.env.TASKS_DB_PATH
-    || join(homedir(), '.openclaw', 'data', 'tasks.db');
+const DB_PATH = process.env.TASKS_DB_PATH || join(homedir(), '.openclaw', 'tasks.db');
+
+let db: Database.Database;
+
+try {
+  db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+  // console.log(`[DB] Connected to ${DB_PATH}`);
+} catch (error) {
+  console.error(`[DB] Failed to connect to ${DB_PATH}:`, error);
+  throw error;
 }
 
-let db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (!db) {
-    db = new Database(getDbPath());
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    db.pragma('busy_timeout = 5000');
+function broadcast(event: string, data: unknown) {
+  try {
+    broadcastToClients(event, data);
+  } catch (error) {
+    console.error(`[DB] Failed to broadcast ${event}:`, error);
   }
+}
+
+export function getDb() {
   return db;
 }
 
-// ===== CRUD Operations =====
-
-/**
- * Broadcast an event if the custom server's broadcast function is available.
- */
-function broadcast(event: string, payload: unknown) {
-  if ((global as { broadcastToClients?: (e: string, p: unknown) => void }).broadcastToClients) {
-    (global as { broadcastToClients: (e: string, p: unknown) => void }).broadcastToClients(event, payload);
-  }
+export function getTask(id: string): Task | null {
+  return getTaskById(id);
 }
 
-export function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Task {
-  const db = getDb();
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-
-  const newTask: Task = {
-    ...task,
-    id,
-    createdAt: now,
-    updatedAt: now,
-    statusChangedAt: now,
-    detailScore: 0,
-    minDetailRequired: 0,
-    autoBackburnered: false,
-    slaBreached: false,
-    blockedBy: [],
-    blockerDescription: '',
-    actualMinutes: 0,
-    source: 'ui',
-  };
-
-  const stmt = db.prepare(`
-    INSERT INTO tasks (
-      id, title, description, status, priority, complexity, danger, type,
-      assignedTo, list, tags, detailScore, minDetailRequired, autoBackburnered,
-      blockedBy, blockerDescription, dueDate, slaBreached,
-      estimatedMinutes, actualMinutes, reminderId, reminderList, reminderSyncedAt,
-      parentId, projectId, createdAt, updatedAt, completedAt, statusChangedAt,
-      source, metadata
-    ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?,
-      ?, ?
-    )
-  `);
-
-  stmt.run(
-    newTask.id,
-    newTask.title,
-    newTask.description || '',
-    newTask.status,
-    newTask.priority,
-    newTask.complexity || 'simple',
-    newTask.danger || 'safe',
-    newTask.type,
-    newTask.assignedTo || null,
-    newTask.list || 'agents',
-    JSON.stringify(newTask.tags),
-    newTask.detailScore,
-    newTask.minDetailRequired,
-    newTask.autoBackburnered ? 1 : 0,
-    JSON.stringify(newTask.blockedBy),
-    newTask.blockerDescription || '',
-    newTask.dueDate || null,
-    newTask.slaBreached ? 1 : 0,
-    newTask.estimatedMinutes || null,
-    newTask.actualMinutes || 0,
-    null, null, null,
-    newTask.parentId || null,
-    newTask.projectId || null,
-    newTask.createdAt,
-    newTask.updatedAt,
-    newTask.completedAt || null,
-    newTask.statusChangedAt,
-    newTask.source || 'ui',
-    newTask.metadata ? JSON.stringify(newTask.metadata) : '{}'
-  );
-
-  broadcast('task.created', { task: newTask });
-
-  return newTask;
+export function closeDb() {
+  db.close();
 }
 
-export function getTasks(filters?: {
+export function getTasks(filters: {
   status?: TaskStatus | TaskStatus[];
   assignedTo?: string;
   type?: TaskType;
@@ -118,12 +46,11 @@ export function getTasks(filters?: {
   tag?: string;
   backburnered?: boolean;
   sort?: string;
-}): Task[] {
-  const db = getDb();
+} = {}): Task[] {
   let query = 'SELECT * FROM tasks WHERE 1=1';
   const params: (string | number | null)[] = [];
 
-  if (filters?.status) {
+  if (filters.status) {
     if (Array.isArray(filters.status)) {
       query += ` AND status IN (${filters.status.map(() => '?').join(',')})`;
       params.push(...filters.status);
@@ -133,22 +60,22 @@ export function getTasks(filters?: {
     }
   }
 
-  if (filters?.assignedTo) {
+  if (filters.assignedTo) {
     query += ' AND assignedTo = ?';
     params.push(filters.assignedTo);
   }
 
-  if (filters?.type) {
+  if (filters.type) {
     query += ' AND type = ?';
     params.push(filters.type);
   }
 
-  if (filters?.priority) {
+  if (filters.priority) {
     query += ' AND priority = ?';
     params.push(filters.priority);
   }
 
-  if (filters?.list) {
+  if (filters.list) {
     if (Array.isArray(filters.list)) {
       query += ` AND list IN (${filters.list.map(() => '?').join(',')})`;
       params.push(...filters.list);
@@ -158,158 +85,146 @@ export function getTasks(filters?: {
     }
   }
 
-  if (filters?.tag) {
+  if (filters.tag) {
     query += ' AND tags LIKE ?';
-    params.push(`%"${filters.tag}"%`);
+    params.push(`%${filters.tag}%`);
   }
 
-  if (filters?.backburnered !== undefined) {
-    query += ' AND autoBackburnered = ?';
+  if (filters.backburnered !== undefined) {
+    query += ' AND backburnered = ?';
     params.push(filters.backburnered ? 1 : 0);
   }
 
-  // Sort
-  switch (filters?.sort) {
-    case 'priority':
-      query += ` ORDER BY
-        CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
-        createdAt DESC`;
-      break;
-    case 'due':
-      query += ' ORDER BY dueDate IS NULL, dueDate ASC, createdAt DESC';
-      break;
-    case 'updated':
+  if (filters.sort) {
+    const [field, direction] = filters.sort.split(':');
+    const validFields = ['createdAt', 'updatedAt', 'priority', 'status', 'title'];
+    if (validFields.includes(field)) {
+      query += ` ORDER BY ${field} ${direction === 'desc' ? 'DESC' : 'ASC'}`;
+    } else {
       query += ' ORDER BY updatedAt DESC';
-      break;
-    default:
-      query += ' ORDER BY createdAt DESC';
-      break;
+    }
+  } else {
+    query += ' ORDER BY updatedAt DESC';
   }
 
-  const stmt = db.prepare(query);
-  const rows = stmt.all(...params) as Record<string, unknown>[];
-
+  const rows = db.prepare(query).all(...params) as Record<string, unknown>[];
   return rows.map(rowToTask);
 }
 
-export function getTask(id: string): Task | null {
-  const db = getDb();
-  const stmt = db.prepare('SELECT * FROM tasks WHERE id = ?');
-  const row = stmt.get(id) as Record<string, unknown> | undefined;
-
+export function getTaskById(id: string): Task | null {
+  const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Record<string, unknown> | undefined;
   return row ? rowToTask(row) : null;
 }
 
-export function updateTask(id: string, updates: Partial<Task>): Task | null {
-  const db = getDb();
-  const existing = getTask(id);
-  if (!existing) return null;
-
+export function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'statusChangedAt'>): Task {
+  const id = Math.random().toString(36).substring(2, 11);
   const now = new Date().toISOString();
-  const updated: Task = {
-    ...existing,
-    ...updates,
-    id: existing.id,
-    createdAt: existing.createdAt,
-    updatedAt: now,
-  };
-
-  // Track status change
-  if (updates.status && updates.status !== existing.status) {
-    updated.statusChangedAt = now;
-    if (updates.status === 'completed') {
-      updated.completedAt = now;
-    }
-  }
-
+  
   const stmt = db.prepare(`
-    UPDATE tasks
-    SET title = ?, description = ?, status = ?, priority = ?, complexity = ?,
-        danger = ?, type = ?, assignedTo = ?, list = ?, updatedAt = ?,
-        completedAt = ?, statusChangedAt = ?, tags = ?, metadata = ?,
-        dueDate = ?, estimatedMinutes = ?, parentId = ?, projectId = ?,
-        blockerDescription = ?
-    WHERE id = ?
+    INSERT INTO tasks (
+      id, title, description, status, priority, type, complexity, danger,
+      assignedTo, list, tags, metadata, dueDate, estimatedMinutes,
+      parentId, projectId, createdAt, updatedAt, statusChangedAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
-    updated.title,
-    updated.description || '',
-    updated.status,
-    updated.priority,
-    updated.complexity || 'simple',
-    updated.danger || 'safe',
-    updated.type,
-    updated.assignedTo || null,
-    updated.list || 'agents',
-    updated.updatedAt,
-    updated.completedAt || null,
-    updated.statusChangedAt || now,
-    JSON.stringify(updated.tags),
-    updated.metadata ? JSON.stringify(updated.metadata) : '{}',
-    updated.dueDate || null,
-    updated.estimatedMinutes || null,
-    updated.parentId || null,
-    updated.projectId || null,
-    updated.blockerDescription || '',
-    id
+    id,
+    task.title,
+    task.description || '',
+    task.status || 'todo',
+    task.priority || 'medium',
+    task.type || 'task',
+    task.complexity || 1,
+    task.danger || 1,
+    task.assignedTo || null,
+    task.list || 'shared',
+    JSON.stringify(task.tags || []),
+    JSON.stringify(task.metadata || {}),
+    task.dueDate || null,
+    task.estimatedMinutes || null,
+    task.parentId || null,
+    task.projectId || null,
+    now,
+    now,
+    now
   );
 
-  broadcast('task.updated', { task: updated });
+  const newTask = getTaskById(id)!;
+  broadcast('task', { action: 'create', task: newTask });
+  return newTask;
+}
 
-  return updated;
+export function updateTask(id: string, updates: Partial<Task>): Task | null {
+  const current = getTaskById(id);
+  if (!current) return null;
+
+  const now = new Date().toISOString();
+  const fields: string[] = [];
+  const params: any[] = [];
+
+  Object.entries(updates).forEach(([key, value]) => {
+    if (['id', 'createdAt', 'updatedAt'].includes(key)) return;
+    
+    fields.push(`${key} = ?`);
+    if (['tags', 'metadata'].includes(key)) {
+      params.push(JSON.stringify(value));
+    } else {
+      params.push(value);
+    }
+  });
+
+  if (fields.length === 0) return current;
+
+  // Add updatedAt and potentially statusChangedAt
+  fields.push('updatedAt = ?');
+  params.push(now);
+  
+  if (updates.status && updates.status !== current.status) {
+    fields.push('statusChangedAt = ?');
+    params.push(now);
+  }
+
+  params.push(id);
+  
+  db.prepare(`UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+  
+  const updatedTask = getTaskById(id)!;
+  broadcast('task', { action: 'update', task: updatedTask });
+  return updatedTask;
 }
 
 export function deleteTask(id: string): boolean {
-  const db = getDb();
-  const stmt = db.prepare('DELETE FROM tasks WHERE id = ?');
-  const result = stmt.run(id);
-  
-  if (result.changes > 0) {
-    broadcast('task.deleted', { id });
-  }
+  const task = getTaskById(id);
+  if (!task) return false;
 
-  return result.changes > 0;
+  db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+  broadcast('task', { action: 'delete', id });
+  return true;
 }
-
-// ===== Helper Functions =====
 
 function rowToTask(row: Record<string, unknown>): Task {
   return {
+    ...row,
     id: row.id as string,
     title: row.title as string,
-    description: (row.description as string) || undefined,
+    description: row.description as string,
     status: row.status as TaskStatus,
     priority: row.priority as TaskPriority,
-    complexity: (row.complexity as string) || 'simple',
-    danger: (row.danger as string) || 'safe',
     type: row.type as TaskType,
-    assignedTo: (row.assignedTo as string) || null,
-    list: (row.list as string) || 'agents',
+    complexity: row.complexity as number,
+    danger: row.danger as number,
+    assignedTo: row.assignedTo as string | null,
+    list: row.list as string,
+    tags: JSON.parse((row.tags as string) || '[]'),
+    metadata: JSON.parse((row.metadata as string) || '{}'),
+    dueDate: row.dueDate as string | null,
+    estimatedMinutes: row.estimatedMinutes as number | null,
+    parentId: row.parentId as string | null,
+    projectId: row.projectId as string | null,
     createdAt: row.createdAt as string,
     updatedAt: row.updatedAt as string,
-    completedAt: (row.completedAt as string) || undefined,
-    statusChangedAt: (row.statusChangedAt as string) || (row.updatedAt as string),
-    tags: JSON.parse((row.tags as string) || '[]') as string[],
-    metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
-    detailScore: (row.detailScore as number) || 0,
-    minDetailRequired: (row.minDetailRequired as number) || 0,
-    autoBackburnered: !!row.autoBackburnered,
-    slaBreached: !!row.slaBreached,
-    blockedBy: JSON.parse((row.blockedBy as string) || '[]') as string[],
-    blockerDescription: (row.blockerDescription as string) || '',
-    dueDate: (row.dueDate as string) || null,
-    estimatedMinutes: (row.estimatedMinutes as number) || null,
-    actualMinutes: (row.actualMinutes as number) || 0,
-    parentId: (row.parentId as string) || null,
-    projectId: (row.projectId as string) || null,
-    source: (row.source as string) || 'ui',
-  };
-}
-
-export function closeDb() {
-  if (db) {
-    db.close();
-    db = null;
-  }
+    statusChangedAt: row.statusChangedAt as string,
+    backburnered: Boolean(row.backburnered),
+  } as Task;
 }
