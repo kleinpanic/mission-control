@@ -54,7 +54,7 @@ interface StatusData {
   sessions: {
     total: number;
     atCapacity: number;
-    recent?: Record<string, unknown>[];
+    recent?: any[];
   };
   heartbeat: {
     defaultAgentId: string;
@@ -63,7 +63,7 @@ interface StatusData {
   channels: string[];
   health?: {
     status: string;
-    checks?: Record<string, unknown>;
+    checks?: Record<string, any>;
   };
 }
 
@@ -81,7 +81,7 @@ interface CostData {
 interface CronJob {
   id: string;
   name: string;
-  schedule: Record<string, unknown>;
+  schedule: any;
   enabled: boolean;
   lastRun?: string;
   nextRun?: string;
@@ -94,7 +94,7 @@ export default function Dashboard() {
   const [taskStats, setTaskStats] = useState<{ today: number; week: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
-  const [rateLimits, setRateLimits] = useState<Record<string, any> | null>(null);
+  const [rateLimits, setRateLimits] = useState<any>(null);
 
   const { connected, connecting, request, subscribe } = useGateway();
   const { events } = useRealtimeStore();
@@ -108,7 +108,7 @@ export default function Dashboard() {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         return fetch(url, { signal: controller.signal })
-          .then(r => { clearTimeout(timeout); return r.ok ? r.json() as Promise<Record<string, any>> : null; })
+          .then(r => { clearTimeout(timeout); return r.ok ? r.json() : null; })
           .catch(() => { clearTimeout(timeout); return null; });
       };
 
@@ -127,19 +127,19 @@ export default function Dashboard() {
       
       if (agentsResult || statusResult) {
         // Use agents data directly from /api/agents (already enriched with runtime data)
-        const agents: AgentInfo[] = (agentsResult?.agents || []).map((agent: Record<string, any>) => {
+        const agents: AgentInfo[] = (agentsResult?.agents || []).map((agent: any) => {
           return {
-            id: agent.id as string,
-            name: (agent.name as string) || getAgentName(agent.id as string),
+            id: agent.id,
+            name: agent.name || getAgentName(agent.id),
             enabled: agent.enabled !== false,
-            status: (agent.status as AgentInfo["status"]) || "idle",
-            model: (agent.model as string) || null,
-            authMode: (agent.authMode as string) || "unknown",
-            heartbeatInterval: (agent.heartbeatInterval as string) || "—",
-            lastActivity: (agent.lastActivity as string) || null,
-            lastActivityAge: formatAge(agent.lastActivity as string),
-            activeSessions: (agent.sessions as number) || 0,
-            maxSessionPercent: (agent.contextUsage as number) || 0,
+            status: agent.status || "idle",
+            model: agent.model || null,
+            authMode: agent.authMode || "unknown",
+            heartbeatInterval: agent.heartbeatInterval || "—",
+            lastActivity: agent.lastActivity || null,
+            lastActivityAge: formatAge(agent.lastActivity),
+            activeSessions: agent.sessions || 0,
+            maxSessionPercent: agent.contextUsage || 0,
           };
         });
 
@@ -156,15 +156,15 @@ export default function Dashboard() {
           },
           agents,
           sessions: {
-            total: (statusResult?.sessions?.total as number) || (statusResult?.sessions?.count as number) || 0,
-            atCapacity: (statusResult?.sessions?.recent as Record<string, any>[])?.filter((s) => (s.percentUsed as number) >= 95).length || 0,
-            recent: (statusResult?.sessions?.recent as Record<string, any>[]) || [],
+            total: statusResult?.sessions?.total || statusResult?.sessions?.count || 0,
+            atCapacity: statusResult?.sessions?.recent?.filter((s: any) => s.percentUsed >= 95).length || 0,
+            recent: statusResult?.sessions?.recent || [],
           },
           heartbeat: {
-            defaultAgentId: (statusResult?.heartbeat?.defaultAgentId as string) || (agentsResult?.defaultId as string) || "main",
-            nextHeartbeats: (statusResult?.heartbeat?.next as { agentId: string; nextIn: string; nextInMs: number }[]) || [],
+            defaultAgentId: statusResult?.heartbeat?.defaultAgentId || agentsResult?.defaultId || "main",
+            nextHeartbeats: statusResult?.heartbeat?.next || [],
           },
-          channels: (channelsResult?.channels as { id: string }[])?.map((c) => c.id) || [],
+          channels: channelsResult?.channels?.map((c: any) => c.id) || [],
           health: { status: "ok" },
         });
       }
@@ -172,18 +172,18 @@ export default function Dashboard() {
       if (costsResult) {
         setCosts({
           summary: {
-            today: (costsResult.today as number) ?? (costsResult.summary?.today as number) ?? 0,
-            week: (costsResult.week as number) ?? (costsResult.summary?.week as number) ?? 0,
-            month: (costsResult.month as number) ?? (costsResult.summary?.month as number) ?? 0,
-            byProvider: (costsResult.byProvider as Record<string, number>) ?? (costsResult.summary?.byProvider as Record<string, number>) ?? {},
-            byModel: (costsResult.byModel as Record<string, number>) ?? (costsResult.summary?.byModel as Record<string, number>) ?? {},
+            today: costsResult.today ?? costsResult.summary?.today ?? 0,
+            week: costsResult.week ?? costsResult.summary?.week ?? 0,
+            month: costsResult.month ?? costsResult.summary?.month ?? 0,
+            byProvider: costsResult.byProvider ?? costsResult.summary?.byProvider ?? {},
+            byModel: costsResult.byModel ?? costsResult.summary?.byModel ?? {},
           },
-          billingAccount: costsResult.billingAccount as string,
+          billingAccount: costsResult.billingAccount,
         });
       }
 
       if (cronResult) {
-        setCronJobs((cronResult.jobs as CronJob[]) || (cronResult as unknown as CronJob[]) || []);
+        setCronJobs(cronResult.jobs || cronResult || []);
       }
 
       // Calculate task stats
@@ -193,15 +193,14 @@ export default function Dashboard() {
         const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
         
         // Count tasks that moved to review or completed status (based on statusChangedAt)
-        const tasks = tasksResult.tasks as Record<string, any>[];
-        const completedOrReviewTasks = tasks.filter((t) => 
+        const completedOrReviewTasks = tasksResult.tasks.filter((t: any) => 
           (t.status === 'review' || t.status === 'completed') && t.statusChangedAt
         );
-        const tasksToday = completedOrReviewTasks.filter((t) => 
-          new Date(t.statusChangedAt as string).getTime() > oneDayAgo
+        const tasksToday = completedOrReviewTasks.filter((t: any) => 
+          new Date(t.statusChangedAt).getTime() > oneDayAgo
         );
-        const tasksWeek = completedOrReviewTasks.filter((t) => 
-          new Date(t.statusChangedAt as string).getTime() > oneWeekAgo
+        const tasksWeek = completedOrReviewTasks.filter((t: any) => 
+          new Date(t.statusChangedAt).getTime() > oneWeekAgo
         );
         
         setTaskStats({
@@ -216,7 +215,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [request]); // Removed connected from dependencies
+  }, [connected, request]);
 
   // Fetch data on mount + when WS connects (for real-time subscription setup)
   useEffect(() => {
@@ -238,7 +237,7 @@ export default function Dashboard() {
             ...prev,
             agents: prev.agents.map(a => 
               a.id === payload.agentId 
-                ? { ...a, status: payload.status as AgentInfo["status"], lastActivityAge: "Just now" }
+                ? { ...a, status: payload.status, lastActivityAge: "Just now" }
                 : a
             )
           };
@@ -255,8 +254,8 @@ export default function Dashboard() {
     // Subscribe to cron events
     const unsubCron = subscribe("cron", () => {
       // Refresh cron data via HTTP
-      fetch("/api/cron").then(r => r.ok ? r.json() as Promise<Record<string, any>> : null).then(result => {
-        if (result?.jobs) setCronJobs(result.jobs as CronJob[]);
+      fetch("/api/cron").then(r => r.ok ? r.json() : null).then(result => {
+        if (result?.jobs) setCronJobs(result.jobs);
       }).catch(console.error);
     });
 
@@ -448,34 +447,90 @@ export default function Dashboard() {
       </div>
 
       {/* Rate Limits */}
-      {rateLimits && (rateLimits.summary as Record<string, any>)?.rateLimited > 0 && (
-        <Card className="bg-zinc-900 border-zinc-800 border-l-4 border-l-amber-500">
+      {rateLimits && (
+        <Card className={cn(
+          "bg-zinc-900 border-zinc-800",
+          rateLimits.summary?.rateLimited > 0 ? "border-l-4 border-l-amber-500" : "border-l-4 border-l-emerald-500"
+        )}>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg text-zinc-100 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-400" />
-              Rate Limits Active
-              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
-                {(rateLimits.summary as Record<string, any>).rateLimited} agent{(rateLimits.summary as Record<string, any>).rateLimited > 1 ? 's' : ''}
-              </Badge>
+              {rateLimits.summary?.rateLimited > 0 ? (
+                <>
+                  <AlertCircle className="w-5 h-5 text-amber-400" />
+                  Rate Limits Active
+                  <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                    {rateLimits.summary.rateLimited} agent{rateLimits.summary.rateLimited > 1 ? 's' : ''}
+                  </Badge>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  Rate Limits
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
+                    All Clear
+                  </Badge>
+                </>
+              )}
             </CardTitle>
+            <CardDescription className="text-zinc-400">
+              {rateLimits.summary?.rateLimited > 0 
+                ? "Providers on cooldown" 
+                : `${rateLimits.summary?.totalAgents || 0} agents monitored • Recent cooldowns shown below`
+              }
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {(rateLimits.agents as Record<string, any>[])
-                .filter((a) => a.hasActiveCooldown)
-                .map((agent) => (
-                  <div key={agent.agentId as string} className="bg-zinc-800/50 rounded-lg p-3 border border-amber-500/20">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold text-zinc-100">{agent.agentName as string}</span>
-                      <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px]">LIMITED</Badge>
+            {rateLimits.summary?.rateLimited > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {rateLimits.agents
+                  .filter((a: any) => a.hasActiveCooldown)
+                  .map((agent: any) => (
+                    <div key={agent.agentId} className="bg-zinc-800/50 rounded-lg p-3 border border-amber-500/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-zinc-100">{agent.agentName}</span>
+                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px]">LIMITED</Badge>
+                      </div>
+                      <div className="space-y-1">
+                        {agent.cooldowns
+                          .filter((c: any) => c.active)
+                          .map((cooldown: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between text-xs gap-2">
+                              <div className="flex items-center gap-1">
+                                <span className="text-zinc-400 font-mono">{cooldown.provider}</span>
+                                {cooldown.authMode && cooldown.authMode !== 'unknown' && (
+                                  <span className={cn("text-[9px] px-1 rounded",
+                                    cooldown.authMode === 'oauth' ? 'bg-emerald-500/20 text-emerald-400' :
+                                    cooldown.authMode === 'api' || cooldown.authMode === 'token' ? 'bg-amber-500/20 text-amber-400' :
+                                    'bg-zinc-500/20 text-zinc-400'
+                                  )}>
+                                    {cooldown.authMode === 'oauth' ? 'OAuth' : 'API'}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-amber-400">{cooldown.remainingHuman}</span>
+                            </div>
+                          ))}
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      {(agent.cooldowns as Record<string, any>[])
-                        .filter((c) => c.active)
-                        .map((cooldown, idx) => (
+                  ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Show agents with recent (expired) cooldowns */}
+                {rateLimits.agents
+                  .filter((a: any) => a.cooldowns && a.cooldowns.length > 0)
+                  .slice(0, 6)
+                  .map((agent: any) => (
+                    <div key={agent.agentId} className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-zinc-100">{agent.agentName}</span>
+                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">OK</Badge>
+                      </div>
+                      <div className="space-y-1">
+                        {agent.cooldowns.slice(0, 3).map((cooldown: any, idx: number) => (
                           <div key={idx} className="flex items-center justify-between text-xs gap-2">
                             <div className="flex items-center gap-1">
-                              <span className="text-zinc-400 font-mono">{cooldown.provider as string}</span>
+                              <span className="text-zinc-400 font-mono text-[11px]">{cooldown.provider}</span>
                               {cooldown.authMode && cooldown.authMode !== 'unknown' && (
                                 <span className={cn("text-[9px] px-1 rounded",
                                   cooldown.authMode === 'oauth' ? 'bg-emerald-500/20 text-emerald-400' :
@@ -486,13 +541,17 @@ export default function Dashboard() {
                                 </span>
                               )}
                             </div>
-                            <span className="text-amber-400">{cooldown.remainingHuman as string}</span>
+                            <span className="text-zinc-500 text-[11px]">{cooldown.remainingHuman}</span>
                           </div>
                         ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-            </div>
+                  ))}
+                {rateLimits.agents.filter((a: any) => a.cooldowns && a.cooldowns.length > 0).length === 0 && (
+                  <p className="text-zinc-500 text-sm text-center py-4">No cooldown history</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -516,7 +575,7 @@ export default function Dashboard() {
                     <p className="text-xs text-zinc-500">{agent.id}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    {(rateLimits?.agents as Record<string, any>[])?.find((a) => a.agentId === agent.id)?.hasActiveCooldown && (
+                    {rateLimits?.agents?.find((a: any) => a.agentId === agent.id)?.hasActiveCooldown && (
                       <Badge className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30">
                         LIMITED
                       </Badge>

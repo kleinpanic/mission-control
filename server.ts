@@ -67,15 +67,14 @@ try {
   const parsed = JSON.parse(raw);
   if (parsed?.version === 1 && parsed.deviceId && parsed.publicKeyPem && parsed.privateKeyPem) {
     deviceIdentity = {
-      deviceId: parsed.deviceId as string,
-      publicKeyPem: parsed.publicKeyPem as string,
-      privateKeyPem: parsed.privateKeyPem as string,
+      deviceId: parsed.deviceId,
+      publicKeyPem: parsed.publicKeyPem,
+      privateKeyPem: parsed.privateKeyPem,
     };
     console.log(`[Device] Loaded identity: ${parsed.deviceId.slice(0, 16)}...`);
   }
-} catch (e: unknown) {
-  const msg = e instanceof Error ? e.message : String(e);
-  console.warn(`[Device] Failed to load identity from ${DEVICE_IDENTITY_PATH}: ${msg}`);
+} catch (e: any) {
+  console.warn(`[Device] Failed to load identity from ${DEVICE_IDENTITY_PATH}: ${e.message}`);
 }
 
 try {
@@ -84,15 +83,14 @@ try {
   const opToken = parsed?.tokens?.operator;
   if (opToken?.token) {
     deviceAuthToken = {
-      token: opToken.token as string,
-      role: (opToken.role as string) || "operator",
-      scopes: (opToken.scopes as string[]) || [],
+      token: opToken.token,
+      role: opToken.role || "operator",
+      scopes: opToken.scopes || [],
     };
     console.log(`[Device] Loaded auth token with scopes: ${deviceAuthToken.scopes.join(", ")}`);
   }
-} catch (e: unknown) {
-  const msg = e instanceof Error ? e.message : String(e);
-  console.warn(`[Device] Failed to load auth token from ${DEVICE_AUTH_PATH}: ${msg}`);
+} catch (e: any) {
+  console.warn(`[Device] Failed to load auth token from ${DEVICE_AUTH_PATH}: ${e.message}`);
 }
 
 /**
@@ -168,7 +166,7 @@ const connectedClients = new Set<WebSocket>();
  * Broadcast a custom event to all connected WebSocket clients.
  * Called by API routes to push real-time updates.
  */
-export function broadcastToClients(event: string, payload: unknown) {
+export function broadcastToClients(event: string, payload: any) {
   const message = JSON.stringify({
     type: "event",
     event,
@@ -189,13 +187,13 @@ export function broadcastToClients(event: string, payload: unknown) {
 }
 
 // Attach to global for access from API routes
-(global as Record<string, unknown>).broadcastToClients = broadcastToClients;
+(global as any).broadcastToClients = broadcastToClients;
 
 /**
  * Create a WebSocket proxy connection handler.
  * Bridges browser clients to the OpenClaw gateway.
  */
-function handleWsProxyConnection(clientWs: WebSocket, _req: unknown) {
+function handleWsProxyConnection(clientWs: WebSocket, req: { headers: { origin?: string; host?: string } }) {
   // Add to connected clients set
   connectedClients.add(clientWs);
   if (dev) console.log(`[WS Proxy] Client connected (${connectedClients.size} total)`);
@@ -347,7 +345,7 @@ function handleWsProxyConnection(clientWs: WebSocket, _req: unknown) {
         const authToken = deviceAuthToken?.token || GATEWAY_TOKEN;
 
         // Build device object if identity is available
-        let device: Record<string, unknown> | undefined = undefined;
+        let device: any = undefined;
         if (deviceIdentity) {
           const publicKeyB64Url = publicKeyPemToBase64Url(deviceIdentity.publicKeyPem);
           // Use nonce from connect.challenge if available (required for non-local connections)
@@ -376,7 +374,7 @@ function handleWsProxyConnection(clientWs: WebSocket, _req: unknown) {
 
         const connectMsg = {
           type: "req",
-          id: msg.id as string, // preserve original message ID so client gets the response
+          id: msg.id, // preserve original message ID so client gets the response
           method: "connect",
           params: {
             minProtocol: 3,
@@ -404,9 +402,7 @@ function handleWsProxyConnection(clientWs: WebSocket, _req: unknown) {
         }
         return;
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     // Pass through other messages (action requests like sessions.compact, wake, etc.)
     try {
@@ -414,9 +410,7 @@ function handleWsProxyConnection(clientWs: WebSocket, _req: unknown) {
       if (parsed.type === "req") {
         console.log(`[WS Proxy] Forwarding: ${parsed.method} (id=${parsed.id})`);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
     if (gatewayConnected && gatewayWs.readyState === WebSocket.OPEN) {
       gatewayWs.send(str);
     } else {
@@ -457,7 +451,7 @@ app.prepare().then(() => {
 
   // Standalone WebSocket proxy server on separate port
   // This avoids Next.js HTTP/WebSocket conflicts
-  const wsProxyServer = createServer((_req, res) => {
+  const wsProxyServer = createServer((req, res) => {
     res.writeHead(200);
     res.end("WebSocket proxy server");
   });

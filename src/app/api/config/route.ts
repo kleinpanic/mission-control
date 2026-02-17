@@ -5,7 +5,7 @@ import fs from "fs/promises";
 import path from "path";
 
 // Cache for 30s
-let configCache: Record<string, unknown> | null = null;
+let configCache: any = null;
 let configCacheTime = 0;
 const CACHE_TTL = 30_000;
 
@@ -29,7 +29,7 @@ export async function GET() {
     const contextTokens = config.session?.contextTokens || 200000;
 
     // Build agent list from config
-    const agents = (config.agents?.list || []).map((a: Record<string, any>) => ({
+    const agents = (config.agents?.list || []).map((a: any) => ({
       id: a.id,
       model: a.model?.primary || defaultModel,
       heartbeat: a.heartbeat,
@@ -42,7 +42,7 @@ export async function GET() {
     ];
     const seenModels = new Set<string>();
     const providers = config.models?.providers || {};
-    for (const [providerId, pc] of Object.entries(providers) as [string, Record<string, any>][]) {
+    for (const [providerId, pc] of Object.entries(providers) as [string, any][]) {
       for (const model of pc?.models || []) {
         const fullId = `${providerId}/${model.id}`;
         if (!seenModels.has(fullId)) {
@@ -57,7 +57,7 @@ export async function GET() {
 
     // Also include alias models from defaults
     const defaultModels = config.agents?.defaults?.models || {};
-    for (const [modelId, mc] of Object.entries(defaultModels) as [string, Record<string, any>][]) {
+    for (const [modelId, mc] of Object.entries(defaultModels) as [string, any][]) {
       if (!seenModels.has(modelId)) {
         seenModels.add(modelId);
         availableModels.push({

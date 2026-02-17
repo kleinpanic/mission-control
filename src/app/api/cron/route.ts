@@ -6,7 +6,7 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 // Cache for 30 seconds
-let cachedData: { jobs: any[] } | null = null;
+let cachedData: any = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 30 * 1000;
 
@@ -20,7 +20,7 @@ export async function GET(_request: NextRequest) {
     }
 
     // Fetch cron jobs from openclaw CLI (include disabled jobs)
-    const { stdout } = await execAsync(
+    const { stdout, stderr: _stderr } = await execAsync(
       'openclaw cron list --all --json',
       { timeout: 15000 }
     );
@@ -40,20 +40,20 @@ export async function GET(_request: NextRequest) {
     }
 
     const jsonStr = lines.slice(jsonStart).join('\n');
-    const data = JSON.parse(jsonStr) as { jobs?: any[] };
+    const data = JSON.parse(jsonStr);
 
     // Normalize the job format for the frontend
-    const normalizedJobs = (data.jobs || []).map((job: Record<string, any>) => ({
-      id: job.id as string,
-      name: (job.name as string) || (job.id as string),
+    const normalizedJobs = (data.jobs || []).map((job: any) => ({
+      id: job.id,
+      name: job.name || job.id,
       status: job.enabled ? 'active' : 'disabled',
       schedule: job.schedule,
       payload: job.payload,
       sessionTarget: job.sessionTarget,
       enabled: job.enabled,
-      nextRun: job.state?.nextRunAtMs ? new Date(job.state.nextRunAtMs as number).toISOString() : null,
+      nextRun: job.state?.nextRunAtMs ? new Date(job.state.nextRunAtMs).toISOString() : null,
       lastRun: job.state?.lastRunAtMs ? {
-        timestamp: new Date(job.state.lastRunAtMs as number).toISOString(),
+        timestamp: new Date(job.state.lastRunAtMs).toISOString(),
         status: job.state.lastStatus === 'ok' ? 'success' : 'failure',
         error: job.state.lastError,
       } : undefined,

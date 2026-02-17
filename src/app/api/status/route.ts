@@ -65,7 +65,7 @@ function formatDuration(ms: number): string {
 }
 
 // Cache for 10 seconds to improve performance
-let statusCache: StatusResponse | null = null;
+let statusCache: any = null;
 let statusCacheTime = 0;
 const STATUS_CACHE_TTL = 10000;
 
@@ -78,7 +78,7 @@ export async function GET() {
 
     // Get OpenClaw status via gateway HTTP API (faster + more reliable than CLI)
     // Falls back to CLI if HTTP fails
-    let statusData: Record<string, unknown> = {};
+    let statusData: any = {};
     
     const gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:18789';
     const httpUrl = gatewayUrl.replace('ws://', 'http://').replace('wss://', 'https://');
@@ -102,9 +102,9 @@ export async function GET() {
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
-      const result = await res.json() as { result?: Record<string, unknown> };
-      statusData = result.result || (result as unknown as Record<string, unknown>) || {};
-    } catch {
+      const result = await res.json();
+      statusData = result.result || result || {};
+    } catch (httpError: any) {
       // HTTP API failed (expected — gateway doesn't have this endpoint), fallback to CLI
       try {
         const { stdout: statusJson } = await execAsync(
@@ -125,24 +125,21 @@ export async function GET() {
         const jsonStart = lines.findIndex(line => line.trim().startsWith('{'));
         if (jsonStart !== -1) {
           const jsonText = lines.slice(jsonStart).join('\n');
-          statusData = JSON.parse(jsonText) as Record<string, unknown>;
+          statusData = JSON.parse(jsonText);
         }
-      } catch (cliError: unknown) {
-        const msg = cliError instanceof Error ? cliError.message : String(cliError);
-        console.error("[status] CLI fallback failed:", msg);
+      } catch (cliError: any) {
+        console.error("[status] CLI fallback failed:", cliError.message);
       }
     }
 
     // Build agents info
-    const statusHeartbeat = statusData.heartbeat as { agents?: any[], defaultAgentId?: string } | undefined;
-    const heartbeatAgents = (statusHeartbeat?.agents || []) as any[];
-    const statusSessions = statusData.sessions as { recent?: any[], count?: number } | undefined;
-    const recentSessions = (statusSessions?.recent || []) as any[];
+    const heartbeatAgents = statusData.heartbeat?.agents || [];
+    const recentSessions = statusData.sessions?.recent || [];
 
     // Group sessions by agent
-    const sessionsByAgent: Record<string, any[]> = {};
+    const sessionsByAgent: Record<string, SessionInfo[]> = {};
     for (const session of recentSessions) {
-      const agentId = session.agentId as string;
+      const agentId = session.agentId;
       if (!sessionsByAgent[agentId]) {
         sessionsByAgent[agentId] = [];
       }
@@ -150,7 +147,7 @@ export async function GET() {
     }
 
     // Build agent info
-    const agents: AgentInfo[] = heartbeatAgents.map((hb) => {
+    const agents: AgentInfo[] = heartbeatAgents.map((hb: any) => {
       const agentSessions = sessionsByAgent[hb.agentId] || [];
       const mostRecentSession = agentSessions[0];
 
@@ -193,8 +190,8 @@ export async function GET() {
 
     // Calculate next heartbeats
     const nextHeartbeats = heartbeatAgents
-      .filter((hb) => hb.enabled)
-      .map((hb) => {
+      .filter((hb: any) => hb.enabled)
+      .map((hb: any) => {
         // Estimate next heartbeat based on interval
         // This is approximate - would need to track actual last heartbeat time
         const intervalMs = hb.everyMs;
@@ -208,10 +205,10 @@ export async function GET() {
           nextInMs,
         };
       })
-      .sort((a, b) => a.nextInMs - b.nextInMs);
+      .sort((a: any, b: any) => a.nextInMs - b.nextInMs);
 
     // Sessions summary
-    const atCapacity = recentSessions.filter((s) => (s.percentUsed || 0) >= 95).length;
+    const atCapacity = recentSessions.filter((s: any) => s.percentUsed >= 95).length;
 
     const response: StatusResponse = {
       gateway: {
@@ -220,9 +217,9 @@ export async function GET() {
       },
       agents,
       sessions: {
-        total: statusSessions?.count || 0,
+        total: statusData.sessions?.count || 0,
         atCapacity,
-        recent: recentSessions.slice(0, 10).map((s) => ({
+        recent: recentSessions.slice(0, 10).map((s: any) => ({
           agentId: s.agentId,
           key: s.key,
           kind: s.kind,
@@ -236,10 +233,10 @@ export async function GET() {
         })),
       },
       heartbeat: {
-        defaultAgentId: statusHeartbeat?.defaultAgentId || "main",
+        defaultAgentId: statusData.heartbeat?.defaultAgentId || "main",
         nextHeartbeats,
       },
-      channels: (statusData.channelSummary as string[]) || [],
+      channels: statusData.channelSummary || [],
     };
 
     // Update cache

@@ -1,3 +1,5 @@
+// Mission Control - Agents API
+// Provides agent data via OpenClaw CLI (bypasses WebSocket pairing requirement)
 import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -7,7 +9,7 @@ import path from "path";
 const execAsync = promisify(exec);
 
 // Cache for 30 seconds (agent data doesn't change often)
-let agentsCache: Record<string, unknown> | null = null;
+let agentsCache: any = null;
 let agentsCacheTime = 0;
 const AGENTS_CACHE_TTL = 30_000;
 
@@ -32,9 +34,9 @@ export async function GET() {
     const status = JSON.parse(rawOutput.trim());
     
     // Build agent session map from status.sessions.recent
-    const sessionsByAgent: Record<string, Record<string, unknown>[]> = {};
-    (status.sessions?.recent || []).forEach((sess: Record<string, unknown>) => {
-      const agentId = sess.agentId as string;
+    const sessionsByAgent: Record<string, any[]> = {};
+    (status.sessions?.recent || []).forEach((sess: any) => {
+      const agentId = sess.agentId;
       if (!sessionsByAgent[agentId]) {
         sessionsByAgent[agentId] = [];
       }
@@ -42,30 +44,29 @@ export async function GET() {
     });
     
     // Build heartbeat config map
-    const heartbeatByAgent: Record<string, Record<string, unknown>> = {};
-    (status.heartbeat?.agents || []).forEach((hb: Record<string, unknown>) => {
-      heartbeatByAgent[hb.agentId as string] = hb;
+    const heartbeatByAgent: Record<string, any> = {};
+    (status.heartbeat?.agents || []).forEach((hb: any) => {
+      heartbeatByAgent[hb.agentId] = hb;
     });
     
     // Build auth mode map from config.auth.profiles and config.models.providers
-    const authProfiles = (config.auth?.profiles || {}) as Record<string, unknown>;
-    const modelProviders = (config.models?.providers || {}) as Record<string, unknown>;
+    const authProfiles = config.auth?.profiles || {};
+    const modelProviders = config.models?.providers || {};
     
     // Map provider ID to auth mode using auth profiles
     const providerAuthMode: Record<string, string> = {};
     for (const [_profileKey, profile] of Object.entries(authProfiles)) {
-      const p = profile as Record<string, unknown>;
+      const p = profile as any;
       if (p.provider && p.mode) {
         // Auth profiles use format like "provider: anthropic, mode: token"
-        providerAuthMode[p.provider as string] = p.mode as string;
+        providerAuthMode[p.provider] = p.mode;
       }
     }
     // Infer from model provider config for providers without explicit auth profiles
     for (const [providerId, providerConfig] of Object.entries(modelProviders)) {
-      const pc = providerConfig as Record<string, unknown>;
+      const pc = providerConfig as any;
       if (providerAuthMode[providerId]) continue; // explicit auth profile takes precedence
-      const baseUrl = pc.baseUrl as string | undefined;
-      if (baseUrl?.includes("localhost") || baseUrl?.includes("127.0.0.1") || baseUrl?.includes("11434")) {
+      if (pc.baseUrl?.includes("localhost") || pc.baseUrl?.includes("127.0.0.1") || pc.baseUrl?.includes("11434")) {
         providerAuthMode[providerId] = "local";
       } else if (pc.apiKey) {
         providerAuthMode[providerId] = "api-key";
@@ -78,45 +79,70 @@ export async function GET() {
         }
       }
     }
-
+    
+    // Combine agent config with runtime data
+    const agentList = config.agents?.list || [];
+    const agents = agentList.map((agent: any) => {
+      const sessions = sessionsByAgent[agent.id] || [];
+      const heartbeat = heartbeatByAgent[agent.id];
+      
+      // Get most recent session for last activity
+      const mostRecent = sessions.length > 0 
+        ? sessions.reduce((a, b) => a.updatedAt > b.updatedAt ? a : b)
+        : null;
+      
+      // Calculate status based on sessions and heartbeat
+      let status = "idle";
+      if (sessions.some((s: any) => s.abortedLastRun)) {
+        status = "error";
+      } else if (sessions.some((s: any) => s.systemSent && s.ageMs < 300000)) {
+        status = "active";
+      }
+      
+      // Determine model string and provider
+      const modelStr = typeof agent.model === "string" ? agent.model : (agent.model?.primary || "default");
+      const providerId = modelStr.includes("/") ? modelStr.split("/")[0] : "default";
+      const authMode = providerAuthMode[providerId] || "unknown";
+      
+      // Get fallback models with their auth modes
+      const fallbacks = (typeof agent.model === "object" && agent.model?.fallbacks) 
+        ? (agent.model.fallbacks as string[]).map((fb: string) => {
+            const fbProvider = fb.includes("/") ? fb.split("/")[0] : "default";
+            return { model: fb, authMode: providerAuthMode[fbProvider] || "unknown" };
+          })
+        : [];
+      
+      return {
+        id: agent.id,
+        name: agent.name || agent.id,
+        enabled: agent.enabled !== false,
+        status,
+        model: modelStr,
+        authMode, // "oauth" | "api" | "token" | "local" | "unknown"
+        fallbacks,
+        sessions: sessions.length,
+        heartbeatInterval: heartbeat?.every || "unknown",
+        lastActivity: mostRecent ? new Date(mostRecent.updatedAt).toISOString() : null,
+        contextUsage: mostRecent?.percentUsed || 0,
+        totalTokens: sessions.reduce((sum: number, s: any) => sum + (s.totalTokens || 0), 0),
+      };
+    });
+    
     const result = {
-      defaultId: config.agents?.defaults?.id || "main",
-      agents: (config.agents?.list || []).map((agent: any) => {
-        const runtimeHb = heartbeatByAgent[agent.id];
-        const agentSessions = sessionsByAgent[agent.id] || [];
-        const mostRecent = agentSessions[0];
-        
-        // Resolve model and auth mode
-        const modelId = agent.model?.primary || config.agents?.defaults?.model?.primary;
-        const providerId = modelId?.split("/")[0];
-        const authMode = providerAuthMode[providerId] || "unknown";
-
-        return {
-          id: agent.id,
-          name: agent.name || agent.id,
-          enabled: agent.enabled !== false,
-          status: runtimeHb ? (agentSessions.length > 0 ? "active" : "idle") : "idle",
-          model: modelId,
-          authMode,
-          heartbeatInterval: runtimeHb?.every || agent.heartbeat?.every || "—",
-          lastActivity: mostRecent?.updatedAt || null,
-          sessions: agentSessions.length,
-          contextUsage: mostRecent?.percentUsed || 0,
-        };
-      }),
+      agents,
+      timestamp: new Date().toISOString(),
     };
-
+    
     agentsCache = result;
     agentsCacheTime = now;
-
+    
     return NextResponse.json(result);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Failed to fetch agents:", message);
+  } catch (error: any) {
+    console.error("Failed to fetch agents:", error.message);
     return NextResponse.json(
       { 
         error: "Failed to fetch agents",
-        details: message,
+        details: error.message,
         agents: [],
       },
       { status: 500 }
