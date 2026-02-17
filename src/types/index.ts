@@ -55,8 +55,8 @@ export interface Message {
 
 export interface ToolCall {
   name: string;
-  arguments: Record<string, any>;
-  result?: any;
+  arguments: Record<string, unknown>;
+  result?: unknown;
 }
 
 // ===== Cron Types =====
@@ -114,7 +114,7 @@ export interface Task {
   completedAt?: string;
   statusChangedAt?: string;
   tags: string[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   detailScore?: number;
   minDetailRequired?: number;
   autoBackburnered?: boolean;
@@ -178,7 +178,7 @@ export interface Event {
   timestamp: string;
   agentId?: string;
   sessionKey?: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
 }
 
 // ===== Gateway Types =====
@@ -186,22 +186,22 @@ export interface Event {
 export interface GatewayRequest {
   id: string;
   method: string;
-  params?: Record<string, any>;
+  params?: Record<string, unknown>;
 }
 
 export interface GatewayResponse {
   id: string;
-  result?: any;
+  result?: unknown;
   error?: {
     code: number;
     message: string;
-    data?: any;
+    data?: unknown;
   };
 }
 
 export interface GatewayEvent {
   type: EventType;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
 }
 
 // ===== Dashboard Types =====
