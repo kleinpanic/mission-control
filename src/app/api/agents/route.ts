@@ -1,5 +1,3 @@
-// Mission Control - Agents API
-// Provides agent data via OpenClaw CLI (bypasses WebSocket pairing requirement)
 import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -9,7 +7,7 @@ import path from "path";
 const execAsync = promisify(exec);
 
 // Cache for 30 seconds (agent data doesn't change often)
-let agentsCache: unknown = null;
+let agentsCache: Record<string, unknown> | null = null;
 let agentsCacheTime = 0;
 const AGENTS_CACHE_TTL = 30_000;
 
@@ -80,65 +78,37 @@ export async function GET() {
         }
       }
     }
-    
-    // Combine agent config with runtime data
-    const agentList = config.agents?.list || [];
-    const agents = agentList.map((agent: Record<string, unknown>) => {
-      const agentId = (agent.id as string) || "unknown";
-      const sessions = sessionsByAgent[agentId] || [];
-      const heartbeat = heartbeatByAgent[agentId];
-      
-      // Get most recent session for last activity
-      const mostRecent = sessions.length > 0 
-        ? sessions.reduce((a, b) => (a.updatedAt as number) > (b.updatedAt as number) ? a : b)
-        : null;
-      
-      // Calculate status based on sessions and heartbeat
-      let status = "idle";
-      if (sessions.some((s: Record<string, unknown>) => s.abortedLastRun)) {
-        status = "error";
-      } else if (sessions.some((s: Record<string, unknown>) => s.systemSent && (s.ageMs as number) < 300000)) {
-        status = "active";
-      }
-      
-      // Determine model string and provider
-      const agentModel = agent.model as string | { primary?: string; fallbacks?: string[] } | undefined;
-      const modelStr = typeof agentModel === "string" ? agentModel : (agentModel?.primary || "default");
-      const providerId = modelStr.includes("/") ? modelStr.split("/")[0] : "default";
-      const authMode = providerAuthMode[providerId] || "unknown";
-      
-      // Get fallback models with their auth modes
-      const fallbacks = (typeof agentModel === "object" && agentModel?.fallbacks) 
-        ? (agentModel.fallbacks as string[]).map((fb: string) => {
-            const fbProvider = fb.includes("/") ? fb.split("/")[0] : "default";
-            return { model: fb, authMode: providerAuthMode[fbProvider] || "unknown" };
-          })
-        : [];
-      
-      return {
-        id: agentId,
-        name: (agent.name as string) || agentId,
-        enabled: agent.enabled !== false,
-        status,
-        model: modelStr,
-        authMode, // "oauth" | "api" | "token" | "local" | "unknown"
-        fallbacks,
-        sessions: sessions.length,
-        heartbeatInterval: heartbeat?.every || "unknown",
-        lastActivity: mostRecent ? new Date(mostRecent.updatedAt as number).toISOString() : null,
-        contextUsage: (mostRecent?.percentUsed as number) || 0,
-        totalTokens: sessions.reduce((sum: number, s: Record<string, unknown>) => sum + ((s.totalTokens as number) || 0), 0),
-      };
-    });
-    
+
     const result = {
-      agents,
-      timestamp: new Date().toISOString(),
+      defaultId: config.agents?.defaults?.id || "main",
+      agents: (config.agents?.list || []).map((agent: any) => {
+        const runtimeHb = heartbeatByAgent[agent.id];
+        const agentSessions = sessionsByAgent[agent.id] || [];
+        const mostRecent = agentSessions[0];
+        
+        // Resolve model and auth mode
+        const modelId = agent.model?.primary || config.agents?.defaults?.model?.primary;
+        const providerId = modelId?.split("/")[0];
+        const authMode = providerAuthMode[providerId] || "unknown";
+
+        return {
+          id: agent.id,
+          name: agent.name || agent.id,
+          enabled: agent.enabled !== false,
+          status: runtimeHb ? (agentSessions.length > 0 ? "active" : "idle") : "idle",
+          model: modelId,
+          authMode,
+          heartbeatInterval: runtimeHb?.every || agent.heartbeat?.every || "—",
+          lastActivity: mostRecent?.updatedAt || null,
+          sessions: agentSessions.length,
+          contextUsage: mostRecent?.percentUsed || 0,
+        };
+      }),
     };
-    
+
     agentsCache = result;
     agentsCacheTime = now;
-    
+
     return NextResponse.json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

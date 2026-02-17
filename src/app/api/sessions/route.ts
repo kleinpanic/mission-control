@@ -5,11 +5,6 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-// Cache for 15 seconds (sessions change frequently)
-let cachedData: any = null;
-let cacheTimestamp = 0;
-const CACHE_TTL = 15 * 1000;
-
 interface RawSession {
   key: string;
   kind: string;
@@ -23,7 +18,14 @@ interface RawSession {
   totalTokens?: number;
   model?: string;
   contextTokens?: number;
+  compactionCount?: number;
+  flags?: string[];
 }
+
+// Cache for 15 seconds (sessions change frequently)
+let cachedData: { sessions: any[] } | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 15 * 1000;
 
 export async function GET(_request: NextRequest) {
   try {
@@ -40,7 +42,7 @@ export async function GET(_request: NextRequest) {
       { timeout: 10000 }
     );
     
-    const data = JSON.parse(stdout || '{"sessions":[]}');
+    const data = JSON.parse(stdout || '{"sessions":[]}') as { sessions: RawSession[] };
     const allSessions = (data.sessions || []).map((session: RawSession) => {
       // Extract agentId from session key (format: agent:main:...)
       const keyParts = session.key.split(':');
@@ -49,7 +51,7 @@ export async function GET(_request: NextRequest) {
     });
 
     // Sort by updatedAt (most recent first)
-    allSessions.sort((a: any, b: any) => {
+    allSessions.sort((a, b) => {
       const aTime = new Date(a.lastActivity).getTime();
       const bTime = new Date(b.lastActivity).getTime();
       return bTime - aTime;
@@ -74,7 +76,7 @@ export async function GET(_request: NextRequest) {
   }
 }
 
-function normalizeSession(raw: any, agentId: string) {
+function normalizeSession(raw: RawSession, agentId: string) {
   const totalTokens = raw.totalTokens || (raw.inputTokens || 0) + (raw.outputTokens || 0);
   const contextTokens = raw.contextTokens || 200000;
   const percentUsed = Math.round((totalTokens / contextTokens) * 100);
@@ -121,8 +123,6 @@ export async function POST(request: NextRequest) {
     switch (action) {
       case 'compact': {
         // Trigger compaction via gateway
-        // Note: OpenClaw may not expose a direct compact command
-        // This would need to be implemented in openclaw CLI
         const { stdout } = await execAsync(
           `openclaw gateway compact --session "${sessionKey}" --json 2>&1 || echo '{"error":"not_implemented"}'`,
           { timeout: 30000 }
