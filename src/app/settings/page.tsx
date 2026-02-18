@@ -12,8 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Server, Database, Moon, Sun, Monitor, Bot, Cpu, RefreshCw, Save, Lock, Eye, EyeOff, ChevronDown, ChevronRight, MessageSquare, Hash, User, ArrowRight, Globe } from "lucide-react";
-import { useTheme } from "@/components/providers/ThemeProvider";
+import { Server, Database, Moon, Sun, Monitor, Bot, Cpu, RefreshCw, Save, Lock, Eye, EyeOff, ChevronDown, ChevronRight, MessageSquare, Hash, User, ArrowRight, Globe, Palette } from "lucide-react";
+import { useTheme, ACCENT_COLORS, type AccentColor } from "@/components/providers/ThemeProvider";
 import { useGateway } from "@/providers/GatewayProvider";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -66,7 +66,7 @@ interface GatewayConfig {
 }
 
 export default function SettingsPage() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme, accentColor, setAccentColor } = useTheme();
   const { connected, connecting, gatewayUrl, request } = useGateway();
   const [config, setConfig] = useState<GatewayConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -377,7 +377,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Theme Settings */}
+        {/* Theme & Appearance Settings */}
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader>
             <CardTitle className="text-lg text-zinc-100 flex items-center gap-2">
@@ -389,12 +389,13 @@ export default function SettingsPage() {
               Appearance
             </CardTitle>
             <CardDescription className="text-zinc-400">
-              Customize how Mission Control looks
+              Customize how Mission Control looks — theme, colors, and accent
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
+            {/* Theme mode */}
             <div>
-              <p className="text-sm text-zinc-400 mb-3">Theme</p>
+              <p className="text-sm font-medium text-zinc-300 mb-3">Theme Mode</p>
               <div className="flex gap-2">
                 {themeOptions.map((option) => (
                   <Button
@@ -406,16 +407,77 @@ export default function SettingsPage() {
                       "flex items-center gap-2",
                       theme === option.value && "bg-emerald-600 hover:bg-emerald-700"
                     )}
+                    {...(theme === option.value ? { "data-accent-btn": true } : {})}
                   >
                     <option.icon className="w-4 h-4" />
                     {option.label}
                   </Button>
                 ))}
               </div>
+              <div className="flex items-center justify-between text-sm mt-3">
+                <span className="text-zinc-400">Current theme</span>
+                <Badge variant="secondary">{resolvedTheme}</Badge>
+              </div>
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-zinc-400">Current theme</span>
-              <Badge variant="secondary">{resolvedTheme}</Badge>
+
+            {/* Accent Color */}
+            <div>
+              <p className="text-sm font-medium text-zinc-300 mb-1">Accent Color</p>
+              <p className="text-xs text-zinc-500 mb-3">Choose the primary accent color for buttons, badges, and highlights</p>
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                {ACCENT_COLORS.map((color) => {
+                  const isActive = accentColor === color.id;
+                  return (
+                    <button
+                      key={color.id}
+                      onClick={() => setAccentColor(color.id)}
+                      className={cn(
+                        "group relative flex flex-col items-center gap-1.5 p-2 rounded-lg border transition-all",
+                        isActive
+                          ? "border-zinc-500 bg-zinc-800 scale-105"
+                          : "border-zinc-700/50 bg-zinc-800/30 hover:bg-zinc-800/60 hover:border-zinc-600"
+                      )}
+                      title={color.label}
+                    >
+                      <div
+                        className={cn(
+                          "w-8 h-8 rounded-full transition-transform",
+                          isActive && "ring-2 ring-white/30 scale-110"
+                        )}
+                        style={{ backgroundColor: color.hex }}
+                      />
+                      <span className={cn("text-[10px]", isActive ? "text-zinc-200 font-medium" : "text-zinc-500")}>
+                        {color.label}
+                      </span>
+                      {isActive && (
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-zinc-900 border border-zinc-600 rounded-full flex items-center justify-center">
+                          <span className="text-[8px]" style={{ color: color.hex }}>✓</span>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Preview */}
+            <div>
+              <p className="text-sm font-medium text-zinc-300 mb-3">Preview</p>
+              <div className="flex flex-wrap gap-3 p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                <Button size="sm" data-accent-btn className="text-white">
+                  Primary Button
+                </Button>
+                <Badge className="bg-accent-dynamic/20 text-accent-dynamic border border-accent-dynamic/30">
+                  Status Badge
+                </Badge>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-accent-dynamic" />
+                  <span className="text-sm text-accent-dynamic">Accent text</span>
+                </div>
+                <div className="px-3 py-1 border border-accent-dynamic/50 rounded text-sm text-accent-dynamic">
+                  Outlined
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

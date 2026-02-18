@@ -34,7 +34,7 @@ export async function getOpenClawStatus(): Promise<any> {
     try {
       const { stdout } = await execAsync(
         'openclaw status --json 2>/dev/null',
-        { maxBuffer: 10 * 1024 * 1024, timeout: 8000, env: EXEC_ENV }
+        { maxBuffer: 10 * 1024 * 1024, timeout: 20000, env: EXEC_ENV }
       );
 
       // Skip plugin log lines (e.g. "[plugins] ...")

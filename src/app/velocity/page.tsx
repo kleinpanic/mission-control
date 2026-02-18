@@ -107,9 +107,15 @@ export default function VelocityPage() {
             const model = s.model || "unknown";
             const shortName = model.replace(/^(anthropic|openai|google|google-gemini-cli|anthropic-nick|openai-codex)\//, "").replace(/-preview$/, "");
             const existing = modelMap.get(shortName) || { input: 0, output: 0, total: 0, sessions: 0 };
-            existing.input += s.inputTokens || 0;
-            existing.output += s.outputTokens || 0;
-            existing.total += s.totalTokens || 0;
+            const rawInput = s.inputTokens || 0;
+            const rawOutput = s.outputTokens || 0;
+            const rawTotal = s.totalTokens || 0;
+            // If input/output are 0 but totalTokens exists, estimate split (85/15)
+            const estInput = rawInput > 0 ? rawInput : Math.round(rawTotal * 0.85);
+            const estOutput = rawOutput > 0 ? rawOutput : Math.round(rawTotal * 0.15);
+            existing.input += estInput;
+            existing.output += estOutput;
+            existing.total += rawTotal > 0 ? rawTotal : (estInput + estOutput);
             existing.sessions++;
             modelMap.set(shortName, existing);
           }

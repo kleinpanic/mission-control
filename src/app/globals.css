@@ -124,3 +124,43 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Accent Color System ── */
+:root {
+  --accent-color: #10b981;
+  --accent-hover: #059669;
+}
+
+/* Accent-aware utility overrides — elements using data-accent-btn get themed */
+[data-accent-btn] {
+  background-color: var(--accent-color) !important;
+}
+[data-accent-btn]:hover {
+  background-color: var(--accent-hover) !important;
+}
+
+/* Accent ring for active nav items */
+[data-accent-ring] {
+  --tw-ring-color: var(--accent-color);
+}
+
+/* Accent text */
+.text-accent-dynamic {
+  color: var(--accent-color);
+}
+
+/* Accent border */
+.border-accent-dynamic {
+  border-color: var(--accent-color);
+}
+
+/* Accent bg with opacity */
+.bg-accent-dynamic {
+  background-color: var(--accent-color);
+}
+.bg-accent-dynamic\/20 {
+  background-color: color-mix(in srgb, var(--accent-color) 20%, transparent);
+}
+.bg-accent-dynamic\/10 {
+  background-color: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}

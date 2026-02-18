@@ -261,26 +261,37 @@ export default function CostsPage() {
                   <p className="font-mono text-sm text-zinc-100">{data.billingAccount}</p>
                 </div>
               )}
-              {data?.providers?.map((provider, idx) => (
-                <div key={idx} className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-zinc-400">{provider.name}</span>
-                    {provider.type && (
-                      <Badge variant="outline" className="text-[10px]">
-                        {provider.type}
-                      </Badge>
+              {data?.providers?.map((provider: any, idx: number) => {
+                const provCost = provider.monthlyCost ?? provider.cost ?? 0;
+                const provColor = provider.color;
+                return (
+                  <div key={idx} className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        {provColor && <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: provColor }} />}
+                        <span className="text-sm font-medium text-zinc-200">{provider.name}</span>
+                      </div>
+                      {provider.type && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {provider.type}
+                        </Badge>
+                      )}
+                    </div>
+                    {provider.icon && (
+                      <p className="text-xs text-zinc-500">{provider.icon} {provider.description || provider.trackingMethod || ""}</p>
+                    )}
+                    {provider.account && (
+                      <p className="font-mono text-xs text-zinc-500 truncate">{provider.account}</p>
+                    )}
+                    <p className={cn("text-xl font-bold mt-2", provCost > 0 ? "text-zinc-100" : "text-zinc-500")}>
+                      {provCost > 0 ? `$${provCost.toFixed(2)}` : "$0.00"}
+                    </p>
+                    {provider.trackingMethod === "session-tokens" && (
+                      <span className="text-[10px] text-amber-500/80">⚡ Estimated from session tokens</span>
                     )}
                   </div>
-                  {provider.account && (
-                    <p className="font-mono text-xs text-zinc-400 truncate">{provider.account}</p>
-                  )}
-                  {provider.cost !== undefined && (
-                    <p className="font-semibold text-zinc-100 mt-1">
-                      ${provider.cost.toFixed(2)}
-                    </p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
