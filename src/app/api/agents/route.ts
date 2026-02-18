@@ -5,10 +5,10 @@ import fs from "fs/promises";
 import path from "path";
 import { getOpenClawStatus } from "@/lib/statusCache";
 
-// Cache for 30 seconds (agent data doesn't change often)
+// Cache for 10 seconds (need timely idle/active transitions)
 let agentsCache: any = null;
 let agentsCacheTime = 0;
-const AGENTS_CACHE_TTL = 30_000;
+const AGENTS_CACHE_TTL = 10_000;
 
 export async function GET() {
   try {
@@ -84,11 +84,14 @@ export async function GET() {
         : null;
       
       // Calculate status based on sessions and heartbeat
+      // `age` is ms since last session activity. Active = any session updated within 2 min
       let status = "idle";
       if (sessions.some((s: any) => s.abortedLastRun)) {
         status = "error";
-      } else if (sessions.some((s: any) => s.systemSent && s.ageMs < 300000)) {
+      } else if (sessions.some((s: any) => (s.age != null && s.age < 120000))) {
         status = "active";
+      } else if (sessions.some((s: any) => (s.age != null && s.age < 600000))) {
+        status = "waiting"; // active within 10 min but not right now
       }
       
       // Determine model string and provider

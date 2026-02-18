@@ -13,6 +13,7 @@ export interface Agent {
   lastActivity: string | null;
   activeSession: string | null;
   heartbeatNext: string | null;
+  heartbeatInterval?: string;
   heartbeatOverdue: boolean;
   activeSessions?: number;
   tokenLimited?: boolean;
@@ -79,6 +80,8 @@ export interface CronJob {
     kind: 'systemEvent' | 'agentTurn';
     text?: string;
     message?: string;
+    model?: string;
+    timeoutSeconds?: number;
   };
   sessionTarget: 'main' | 'isolated';
   nextRun: string | null;

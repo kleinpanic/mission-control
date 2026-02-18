@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { CostOverview } from "@/components/costs/CostOverview";
-import { ProviderBreakdown } from "@/components/costs/ProviderBreakdown";
+// ProviderBreakdown replaced with inline provider/agent cards
 import { CostTable } from "@/components/costs/CostTable";
 import { CostTrendChart } from "@/components/costs/CostTrendChart";
 import { ModelUsageChart } from "@/components/costs/ModelUsageChart";
@@ -11,7 +11,8 @@ import { ModelUsageAlerts } from "@/components/costs/ModelUsageAlerts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RefreshCw, Wifi, WifiOff, Loader2, CreditCard, Building2 } from "lucide-react";
+import { RefreshCw, Wifi, WifiOff, Loader2, CreditCard, Building2, Users, Bot } from "lucide-react";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Button } from "@/components/ui/button";
 import { useGateway } from "@/providers/GatewayProvider";
 import { cn } from "@/lib/utils";
@@ -21,7 +22,8 @@ interface CostSummary {
   week: number;
   month: number;
   byProvider: Record<string, number>;
-  byModel: Record<string, number>;
+  byModel: Record<string, any>; // value can be number or {cost, inputTokens, outputTokens, sessions, pricing}
+  byAgent?: Record<string, { cost: number; tokens: number; sessions: number; models: string[] }>;
 }
 
 interface CostData {
@@ -193,6 +195,7 @@ export default function CostsPage() {
     month: data?.summary?.month ?? 0,
     byProvider: data?.summary?.byProvider ?? {},
     byModel: data?.summary?.byModel ?? {},
+    byAgent: data?.summary?.byAgent,
   };
 
   return (
@@ -319,6 +322,9 @@ export default function CostsPage() {
           daily={historyData.daily}
           weekly={historyData.weekly}
           monthly={historyData.monthly}
+          dailyByProvider={(historyData as any).dailyByProvider}
+          dailyByModel={(historyData as any).dailyByModel}
+          geminiEstimate={(historyData as any).geminiEstimate}
         />
       )}
 
@@ -330,11 +336,160 @@ export default function CostsPage() {
         />
       )}
 
-      {/* Provider/Model Breakdown (Existing) */}
+      {/* Provider Details + Agent Cost Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ProviderBreakdown data={historyData?.byProvider || summary.byProvider} />
-        <ProviderBreakdown data={historyData?.byModel || summary.byModel} title="By Model" />
+        {/* Provider Breakdown with pricing details */}
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base text-zinc-100">By Provider</CardTitle>
+              <InfoTip content="Monthly cost per API provider. Token-based costs use per-model API pricing. Claude & Codex from codexbar (authoritative). Others estimated from session token counts." />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-[350px] overflow-y-auto">
+              {(data as any)?.providers?.length > 0
+                ? (data as any).providers
+                    .filter((p: any) => p.monthlyCost > 0)
+                    .sort((a: any, b: any) => b.monthlyCost - a.monthlyCost)
+                    .map((p: any) => (
+                      <div key={p.id} className="flex items-center justify-between p-2.5 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: p.color }} />
+                          <div>
+                            <span className="text-sm font-medium text-zinc-200">{p.name}</span>
+                            <p className="text-xs text-zinc-500">{p.icon} {p.description}</p>
+                            {p.trackingMethod === "session-tokens" && (
+                              <span className="text-[10px] text-amber-500/80">⚡ Estimated from session tokens</span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-sm font-semibold text-zinc-100">${p.monthlyCost.toFixed(2)}</span>
+                      </div>
+                    ))
+                : Object.entries(historyData?.byProvider || summary.byProvider)
+                    .sort(([, a], [, b]) => (b as number) - (a as number))
+                    .map(([name, cost]) => (
+                      <div key={name} className="flex items-center justify-between p-2 bg-zinc-800/50 rounded">
+                        <span className="text-sm text-zinc-300 capitalize">{name}</span>
+                        <span className="text-sm font-medium text-zinc-100">${(cost as number).toFixed(2)}</span>
+                      </div>
+                    ))
+              }
+              {Object.keys(summary.byProvider).length === 0 && !(data as any)?.providers?.length && (
+                <p className="text-sm text-zinc-500 text-center py-4">No provider data available</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Agent Cost Breakdown — scrollable */}
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base text-zinc-100">By Agent</CardTitle>
+              <InfoTip content="Estimated per-agent costs from current sessions. Based on session token counts × model API pricing. Only includes active/recent sessions, not historical." />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-[350px] overflow-y-auto">
+              {summary.byAgent && Object.keys(summary.byAgent).length > 0
+                ? Object.entries(summary.byAgent)
+                    .sort(([, a], [, b]) => b.cost - a.cost)
+                    .map(([agentId, info]) => (
+                      <div key={agentId} className="flex items-center justify-between p-2.5 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                        <div className="flex items-center gap-2.5">
+                          <Bot className="w-4 h-4 text-zinc-500" />
+                          <div>
+                            <span className="text-sm font-medium text-zinc-200">{agentId}</span>
+                            <div className="flex items-center gap-2 text-xs text-zinc-500">
+                              <span>{info.sessions} sessions</span>
+                              <span>•</span>
+                              <span>{info.tokens > 1000000 ? `${(info.tokens / 1000000).toFixed(1)}M` : info.tokens > 1000 ? `${Math.floor(info.tokens / 1000)}k` : info.tokens} tokens</span>
+                            </div>
+                            {info.models.length > 0 && (
+                              <div className="flex gap-1 mt-0.5 flex-wrap">
+                                {info.models.slice(0, 3).map(m => (
+                                  <Badge key={m} variant="outline" className="text-[9px] h-4 px-1 border-zinc-600 text-zinc-400">{m.split('-').slice(-2).join('-')}</Badge>
+                                ))}
+                                {info.models.length > 3 && <span className="text-[9px] text-zinc-500">+{info.models.length - 3}</span>}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <span className={cn("text-sm font-semibold", info.cost > 0 ? "text-zinc-100" : "text-zinc-500")}>
+                          {info.cost > 0 ? `$${info.cost.toFixed(2)}` : "—"}
+                        </span>
+                      </div>
+                    ))
+                : historyData?.byAgent && Object.keys(historyData.byAgent).length > 0
+                  ? Object.entries(historyData.byAgent)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([name, cost]) => (
+                        <div key={name} className="flex items-center justify-between p-2 bg-zinc-800/50 rounded">
+                          <span className="text-sm text-zinc-300">{name}</span>
+                          <span className="text-sm font-medium text-zinc-100">${cost.toFixed(2)}</span>
+                        </div>
+                      ))
+                  : <p className="text-sm text-zinc-500 text-center py-4">No agent cost data available</p>
+              }
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* By Model (detailed with pricing info) */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base text-zinc-100">By Model</CardTitle>
+            <InfoTip content="Per-model cost breakdown. Shows per-model token pricing (input/output per 1M tokens), total tokens consumed, and estimated cost." />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {Object.entries(summary.byModel).length > 0
+              ? Object.entries(summary.byModel)
+                  .sort(([, a], [, b]) => {
+                    const costA = typeof a === 'number' ? a : a.cost;
+                    const costB = typeof b === 'number' ? b : b.cost;
+                    return costB - costA;
+                  })
+                  .map(([model, info]) => {
+                    const cost = typeof info === 'number' ? info : info.cost;
+                    const inputTokens = typeof info === 'object' ? info.inputTokens : 0;
+                    const outputTokens = typeof info === 'object' ? info.outputTokens : 0;
+                    const sessions = typeof info === 'object' ? info.sessions : undefined;
+                    const pricing = typeof info === 'object' ? info.pricing : undefined;
+                    return (
+                      <div key={model} className="p-2.5 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <code className="text-sm font-mono text-zinc-200">{model}</code>
+                            {sessions && <span className="text-xs text-zinc-500 ml-2">({sessions} sessions)</span>}
+                          </div>
+                          <span className={cn("text-sm font-semibold", cost > 0 ? "text-zinc-100" : "text-zinc-500")}>
+                            {cost > 0 ? `$${cost.toFixed(2)}` : "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-zinc-500 mt-1">
+                          {pricing && <span className="text-emerald-500/70">{pricing}</span>}
+                          {(inputTokens > 0 || outputTokens > 0) && (
+                            <span>
+                              {inputTokens > 1000000 ? `${(inputTokens / 1000000).toFixed(1)}M` : `${Math.floor(inputTokens / 1000)}k`} in
+                              {" / "}
+                              {outputTokens > 1000000 ? `${(outputTokens / 1000000).toFixed(1)}M` : `${Math.floor(outputTokens / 1000)}k`} out
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+              : <p className="text-sm text-zinc-500 text-center py-4">No model cost data available</p>
+            }
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Detailed Table */}
       <CostTable data={(historyData as any)?.dailyDetails || data?.raw || []} />

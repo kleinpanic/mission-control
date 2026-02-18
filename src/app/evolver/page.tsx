@@ -19,6 +19,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { InfoTip } from "@/components/ui/info-tip";
 
 interface Gene {
   id: string;
@@ -212,10 +213,13 @@ export default function EvolverPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
-            <Dna className="w-7 h-7" />
-            Capability Evolver
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
+              <Dna className="w-7 h-7" />
+              Capability Evolver
+            </h1>
+            <InfoTip content="Self-improvement engine for agents. Genes define evolution strategies. Capsules are learned patterns from past experience. Pending evolutions need your approval before being applied. Run Evolution Review to scan for improvement opportunities." />
+          </div>
           <p className="text-sm text-zinc-400 mt-1">
             Self-improvement engine • Manage evolution capabilities and proposals
           </p>
@@ -325,8 +329,10 @@ export default function EvolverPage() {
         <TabsContent value="genes" className="mt-6 space-y-4">
           {genes.length === 0 ? (
             <Card className="bg-zinc-900 border-zinc-800">
-              <CardContent className="pt-8 pb-8 text-center">
-                <p className="text-zinc-400">No genes found</p>
+              <CardContent className="pt-8 pb-8 text-center space-y-2">
+                <Dna className="w-8 h-8 text-zinc-600 mx-auto" />
+                <p className="text-zinc-400">No evolution genes configured</p>
+                <p className="text-xs text-zinc-600">Genes are defined in the capability-evolver skill config. They specify signal patterns, preconditions, and mutation strategies for autonomous self-improvement.</p>
               </CardContent>
             </Card>
           ) : (
@@ -451,8 +457,10 @@ export default function EvolverPage() {
         <TabsContent value="events" className="mt-6 space-y-4">
           {events.length === 0 ? (
             <Card className="bg-zinc-900 border-zinc-800">
-              <CardContent className="pt-8 pb-8 text-center">
+              <CardContent className="pt-8 pb-8 text-center space-y-2">
+                <Activity className="w-8 h-8 text-zinc-600 mx-auto" />
                 <p className="text-zinc-400">No evolution events yet</p>
+                <p className="text-xs text-zinc-600">Events are logged when the evolver successfully applies a mutation or when a mutation fails. Run an Evolution Review to generate the first events.</p>
               </CardContent>
             </Card>
           ) : (

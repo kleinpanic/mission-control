@@ -480,7 +480,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Model Aliases */}
+        {/* Model Aliases — Collapsible */}
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader>
             <CardTitle className="text-lg text-zinc-100 flex items-center gap-2">
@@ -491,21 +491,28 @@ export default function SettingsPage() {
               Models configured in gateway (from providers + agent defaults)
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {(config?.availableModels || [])
-              .filter(m => m.value !== "default")
-              .map((item) => (
-              <div
-                key={item.value}
-                className="flex items-center justify-between p-2 bg-zinc-800/50 rounded"
-              >
-                <code className="text-sm text-emerald-400 truncate mr-2">{item.value}</code>
-                <span className="text-sm text-zinc-400 truncate">{item.label}</span>
+          <CardContent>
+            <details>
+              <summary className="cursor-pointer text-sm text-zinc-300 hover:text-zinc-100 transition-colors py-1">
+                Show {(config?.availableModels || []).filter(m => m.value !== "default").length} models
+              </summary>
+              <div className="space-y-2 mt-3">
+                {(config?.availableModels || [])
+                  .filter(m => m.value !== "default")
+                  .map((item) => (
+                  <div
+                    key={item.value}
+                    className="flex items-center justify-between p-2 bg-zinc-800/50 rounded"
+                  >
+                    <code className="text-sm text-emerald-400 truncate mr-2">{item.value}</code>
+                    <span className="text-sm text-zinc-400 truncate">{item.label}</span>
+                  </div>
+                ))}
+                {(!config?.availableModels || config.availableModels.length <= 1) && (
+                  <p className="text-zinc-500 text-center py-4">No models found in config</p>
+                )}
               </div>
-            ))}
-            {(!config?.availableModels || config.availableModels.length <= 1) && (
-              <p className="text-zinc-500 text-center py-4">No models found in config</p>
-            )}
+            </details>
           </CardContent>
         </Card>
 
