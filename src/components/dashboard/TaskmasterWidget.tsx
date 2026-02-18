@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Clock, AlertTriangle, Zap, Play, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, AlertTriangle, Zap, Play, ChevronDown, ChevronUp, ExternalLink, PauseCircle, RotateCcw, ArrowRight, Trash2 } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { InfoTip } from "@/components/ui/info-tip";
 
@@ -50,6 +52,7 @@ export function TaskmasterWidget() {
   const [loading, setLoading] = useState(true);
   const [slaExpanded, setSlaExpanded] = useState(false);
   const [triaging, setTriaging] = useState(false);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   const fetchStatus = async () => {
     try {
@@ -79,6 +82,30 @@ export function TaskmasterWidget() {
       console.error("Failed to trigger triage:", error);
     } finally {
       setTimeout(() => setTriaging(false), 5000);
+    }
+  };
+
+  const handleSlaAction = async (taskId: string, action: "reassign" | "deprioritize" | "dismiss" | "unblock") => {
+    setActionInProgress(`${action}-${taskId}`);
+    try {
+      const res = await fetch("/api/taskmaster/sla", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, action }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed");
+      toast.success(
+        action === "reassign" ? "Task queued for re-triage" :
+        action === "deprioritize" ? "Task priority lowered" :
+        action === "dismiss" ? "SLA breach dismissed" :
+        "Task unblocked and re-queued"
+      );
+      setTimeout(fetchStatus, 1500);
+    } catch (err: any) {
+      toast.error(err.message || `Failed to ${action} task`);
+    } finally {
+      setActionInProgress(null);
     }
   };
 
@@ -187,29 +214,108 @@ export function TaskmasterWidget() {
                 <AlertTriangle className="w-3.5 h-3.5" />
                 {status.slaBreaches} SLA Breach{status.slaBreaches !== 1 ? "es" : ""}
               </span>
-              {slaExpanded ? <ChevronUp className="w-4 h-4 text-zinc-500" /> : <ChevronDown className="w-4 h-4 text-zinc-500" />}
+              <div className="flex items-center gap-2">
+                {!slaExpanded && (
+                  <span className="text-[10px] text-zinc-500">Click to manage</span>
+                )}
+                {slaExpanded ? <ChevronUp className="w-4 h-4 text-zinc-500" /> : <ChevronDown className="w-4 h-4 text-zinc-500" />}
+              </div>
             </button>
             {slaExpanded && (
               <div className="divide-y divide-zinc-800/50">
-                {status.slaBreachedTasks.map(task => (
-                  <div key={task.id} className="px-3 py-2.5 flex items-start gap-2">
-                    <Badge className={cn("text-[9px] shrink-0 mt-0.5", PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.low)}>
-                      {task.priority}
-                    </Badge>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-zinc-200 truncate">{task.title}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <Badge className={cn("text-[9px]", STATUS_COLORS[task.status] || "bg-zinc-500/20 text-zinc-400")}>
-                          {task.status}
+                {status.slaBreachedTasks.map(task => {
+                  const isActing = actionInProgress?.includes(task.id);
+                  const ageMs = Date.now() - new Date(task.createdAt).getTime();
+                  const ageDays = Math.floor(ageMs / 86400000);
+                  return (
+                    <div key={task.id} className="px-3 py-3 space-y-2">
+                      {/* Task info row */}
+                      <div className="flex items-start gap-2">
+                        <Badge className={cn("text-[9px] shrink-0 mt-0.5", PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.low)}>
+                          {task.priority}
                         </Badge>
-                        {task.assignedTo && (
-                          <span className="text-[10px] text-zinc-500">→ {task.assignedTo}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-zinc-200 truncate">{task.title}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <Badge className={cn("text-[9px]", STATUS_COLORS[task.status] || "bg-zinc-500/20 text-zinc-400")}>
+                              {task.status}
+                            </Badge>
+                            {task.assignedTo && (
+                              <span className="text-[10px] text-zinc-500">→ {task.assignedTo}</span>
+                            )}
+                            <span className="text-[10px] text-zinc-500">{task.list}</span>
+                            <span className="text-[10px] text-red-400/70">⏱ {ageDays}d overdue</span>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Action buttons row */}
+                      <div className="flex items-center gap-1.5 pl-7">
+                        {task.status === "blocked" && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[10px] px-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                                disabled={!!isActing}
+                                onClick={() => handleSlaAction(task.id, "unblock")}
+                              >
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                Unblock
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Move task back to &quot;ready&quot; status so it can be picked up again</TooltipContent>
+                          </Tooltip>
                         )}
-                        <span className="text-[10px] text-zinc-500">{task.list}</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 text-[10px] px-2 border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                              disabled={!!isActing}
+                              onClick={() => handleSlaAction(task.id, "reassign")}
+                            >
+                              <ArrowRight className="w-3 h-3 mr-1" />
+                              Re-triage
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Put task back in intake queue for re-assignment to a different agent or model tier</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 text-[10px] px-2 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                              disabled={!!isActing}
+                              onClick={() => handleSlaAction(task.id, "deprioritize")}
+                            >
+                              <PauseCircle className="w-3 h-3 mr-1" />
+                              Lower Priority
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Reduce task priority (extends the SLA deadline). Use when the task is still valid but not urgent.</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 text-[10px] px-2 border-zinc-600 text-zinc-400 hover:bg-zinc-800"
+                              disabled={!!isActing}
+                              onClick={() => handleSlaAction(task.id, "dismiss")}
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" />
+                              Dismiss
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Clear the SLA breach flag. Task stays in its current status but the overdue warning is removed.</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -128,15 +128,18 @@ export function AgentActivity({ sessions = [], byAgent = [] }: AgentActivityProp
   const groups: AgentGroup[] = [];
   const agentMap = new Map<string, SessionInfo[]>();
 
+  // Filter out "system" agent — these are internal OpenClaw infrastructure sessions, not user-facing
+  const HIDDEN_AGENTS = new Set(["system"]);
+
   for (const ba of effectiveByAgent) {
-    if (ba.agentId && ba.recent?.length > 0) {
+    if (ba.agentId && ba.recent?.length > 0 && !HIDDEN_AGENTS.has(ba.agentId)) {
       agentMap.set(ba.agentId, ba.recent);
     }
   }
 
   if (agentMap.size === 0) {
     for (const s of sessions) {
-      if (!s.agentId) continue;
+      if (!s.agentId || HIDDEN_AGENTS.has(s.agentId)) continue;
       if (!agentMap.has(s.agentId)) agentMap.set(s.agentId, []);
       agentMap.get(s.agentId)!.push(s);
     }
