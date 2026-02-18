@@ -29,7 +29,10 @@ const PROVIDER_COLORS: Record<string, string> = {
   claude: "#ef4444",   // red
   codex: "#22c55e",    // green
   openai: "#22c55e",
-  gemini: "#3b82f6",   // blue (estimated)
+  google: "#3b82f6",   // blue
+  gemini: "#3b82f6",   // alias
+  xai: "#a855f7",      // purple
+  perplexity: "#06b6d4", // cyan
 };
 
 const MODEL_COLORS: Record<string, string> = {
@@ -41,6 +44,10 @@ const MODEL_COLORS: Record<string, string> = {
   "gpt-5.3-codex": "#16a34a",
   "gemini-3-flash-preview": "#60a5fa",
   "gemini-3-pro-preview": "#3b82f6",
+  "grok-3": "#a855f7",
+  "grok-3-mini": "#c084fc",
+  "sonar-pro": "#06b6d4",
+  "sonar": "#22d3ee",
 };
 
 function getColor(key: string, palette: Record<string, string>, index: number): string {

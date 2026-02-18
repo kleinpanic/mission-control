@@ -15,6 +15,8 @@ import {
   Lightbulb,
   Archive,
   Activity,
+  Search,
+  GitBranch,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -77,6 +79,9 @@ export default function EvolverPage() {
   const [stats, setStats] = useState<EvolverStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [geneSearch, setGeneSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [eventOutcomeFilter, setEventOutcomeFilter] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -306,7 +311,7 @@ export default function EvolverPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="genes" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-zinc-800">
+        <TabsList className="grid w-full grid-cols-5 bg-zinc-800">
           <TabsTrigger value="genes">
             Genes {stats && `(${stats.totalGenes})`}
           </TabsTrigger>
@@ -316,6 +321,9 @@ export default function EvolverPage() {
                 {stats.pendingEvolutions}
               </Badge>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="timeline">
+            <GitBranch className="w-3.5 h-3.5 mr-1" />Timeline
           </TabsTrigger>
           <TabsTrigger value="events">
             History {stats && `(${stats.totalEvents})`}
@@ -327,6 +335,38 @@ export default function EvolverPage() {
 
         {/* Genes Tab */}
         <TabsContent value="genes" className="mt-6 space-y-4">
+          {/* Search & Filter */}
+          {genes.length > 0 && (
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="Search genes..."
+                  value={geneSearch}
+                  onChange={(e) => setGeneSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-zinc-500">Category:</span>
+                {[null, ...Array.from(new Set(genes.map(g => g.category)))].map(cat => (
+                  <Button
+                    key={cat ?? "all"}
+                    variant={categoryFilter === cat ? "default" : "outline"}
+                    size="sm"
+                    className={cn(
+                      "h-7 text-xs",
+                      categoryFilter === cat ? "bg-emerald-600 hover:bg-emerald-500" : "border-zinc-700 text-zinc-400"
+                    )}
+                    onClick={() => setCategoryFilter(cat)}
+                  >
+                    {cat ?? "All"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
           {genes.length === 0 ? (
             <Card className="bg-zinc-900 border-zinc-800">
               <CardContent className="pt-8 pb-8 text-center space-y-2">
@@ -336,7 +376,10 @@ export default function EvolverPage() {
               </CardContent>
             </Card>
           ) : (
-            genes.map((gene) => (
+            genes
+              .filter(g => !geneSearch || g.id.toLowerCase().includes(geneSearch.toLowerCase()) || g.signals_match.some(s => s.toLowerCase().includes(geneSearch.toLowerCase())) || g.strategy.some(s => s.toLowerCase().includes(geneSearch.toLowerCase())))
+              .filter(g => !categoryFilter || g.category === categoryFilter)
+              .map((gene) => (
               <Card key={gene.id} className="bg-zinc-900 border-zinc-800">
                 <CardHeader>
                   <div className="flex items-start justify-between">
@@ -453,8 +496,103 @@ export default function EvolverPage() {
           )}
         </TabsContent>
 
+        {/* Evolution Timeline Tab */}
+        <TabsContent value="timeline" className="mt-6 space-y-4">
+          <Card className="bg-zinc-900 border-zinc-800">
+            <CardHeader>
+              <CardTitle className="text-lg text-zinc-100 flex items-center gap-2">
+                <GitBranch className="w-5 h-5 text-cyan-400" />
+                Evolution Timeline
+              </CardTitle>
+              <CardDescription className="text-zinc-400">Visual timeline of all mutations and their outcomes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {events.length === 0 ? (
+                <div className="text-center py-8">
+                  <GitBranch className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                  <p className="text-zinc-500 text-sm">No evolution events to visualize</p>
+                </div>
+              ) : (
+                <div className="relative">
+                  {/* Timeline line */}
+                  <div className="absolute left-6 top-0 bottom-0 w-px bg-zinc-700" />
+                  <div className="space-y-4">
+                    {events.slice().reverse().map((event, idx) => (
+                      <div key={event.id} className="relative flex gap-4 items-start">
+                        {/* Timeline dot */}
+                        <div className={cn(
+                          "relative z-10 w-3 h-3 rounded-full mt-1.5 ring-4 ring-zinc-900 flex-shrink-0 ml-[18px]",
+                          event.outcome === "success" ? "bg-emerald-400" :
+                          event.outcome === "failure" ? "bg-red-400" :
+                          "bg-yellow-400"
+                        )} />
+                        {/* Content */}
+                        <div className={cn(
+                          "flex-1 p-3 rounded-lg border",
+                          event.outcome === "success" ? "bg-emerald-500/5 border-emerald-500/20" :
+                          event.outcome === "failure" ? "bg-red-500/5 border-red-500/20" :
+                          "bg-yellow-500/5 border-yellow-500/20"
+                        )}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium text-zinc-200">{event.mutation.description}</span>
+                            <Badge className={cn(
+                              "text-[9px]",
+                              event.outcome === "success" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/50" :
+                              event.outcome === "failure" ? "bg-red-500/20 text-red-400 border-red-500/50" :
+                              "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
+                            )}>{event.outcome}</Badge>
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px] text-zinc-500">
+                            <span>{new Date(event.timestamp).toLocaleString()}</span>
+                            <span>•</span>
+                            <span className="font-mono">{event.gene_id}</span>
+                            <span>•</span>
+                            <span>{event.mutation.files_changed.length} files</span>
+                            <span>•</span>
+                            <span className="capitalize">{event.mutation.blast_radius} blast radius</span>
+                          </div>
+                          {event.mutation.files_changed.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {event.mutation.files_changed.slice(0, 5).map((f, fi) => (
+                                <Badge key={fi} variant="outline" className="text-[9px] font-mono border-zinc-700 text-zinc-400">{f}</Badge>
+                              ))}
+                              {event.mutation.files_changed.length > 5 && (
+                                <span className="text-[9px] text-zinc-500">+{event.mutation.files_changed.length - 5} more</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Events Tab */}
         <TabsContent value="events" className="mt-6 space-y-4">
+          {/* Outcome filter */}
+          {events.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-zinc-500">Outcome:</span>
+              {[null, "success", "failure", "pending"].map(outcome => (
+                <Button
+                  key={outcome ?? "all"}
+                  variant={eventOutcomeFilter === outcome ? "default" : "outline"}
+                  size="sm"
+                  className={cn(
+                    "h-7 text-xs",
+                    eventOutcomeFilter === outcome ? "bg-emerald-600 hover:bg-emerald-500" : "border-zinc-700 text-zinc-400"
+                  )}
+                  onClick={() => setEventOutcomeFilter(outcome)}
+                >
+                  {outcome ? outcome.charAt(0).toUpperCase() + outcome.slice(1) : "All"}
+                </Button>
+              ))}
+            </div>
+          )}
           {events.length === 0 ? (
             <Card className="bg-zinc-900 border-zinc-800">
               <CardContent className="pt-8 pb-8 text-center space-y-2">
@@ -464,7 +602,9 @@ export default function EvolverPage() {
               </CardContent>
             </Card>
           ) : (
-            events.slice().reverse().map((event) => (
+            events
+              .filter(e => !eventOutcomeFilter || e.outcome === eventOutcomeFilter)
+              .slice().reverse().map((event) => (
               <Card key={event.id} className="bg-zinc-900 border-zinc-800">
                 <CardHeader>
                   <div className="flex items-start justify-between">

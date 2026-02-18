@@ -97,6 +97,65 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, output: stdout });
     }
 
+    // Update cron schedule (used by auto-normalize)
+    if (action === 'update-schedule' && jobId) {
+      const { cronExpr } = body;
+      if (!cronExpr || typeof cronExpr !== 'string') {
+        return NextResponse.json({ error: 'Missing or invalid cronExpr' }, { status: 400 });
+      }
+      // Validate cron expr has 5 fields
+      const parts = cronExpr.trim().split(/\s+/);
+      if (parts.length < 5) {
+        return NextResponse.json({ error: 'Invalid cron expression: expected 5 fields' }, { status: 400 });
+      }
+      // Shell-escape the job id and cron expression
+      const safeJobId = jobId.replace(/[^a-zA-Z0-9_-]/g, '');
+      const safeCron = cronExpr.replace(/'/g, "'\\''");
+      const { stdout: updateOut } = await execAsync(
+        `openclaw cron edit '${safeJobId}' --cron '${safeCron}'`,
+        { timeout: 15000 }
+      );
+      
+      // Invalidate cache
+      cachedData = null;
+      cacheTimestamp = 0;
+      
+      return NextResponse.json({ success: true, output: updateOut });
+    }
+
+    // Bulk update cron schedules (auto-normalize batch)
+    if (action === 'bulk-update-schedules') {
+      const { updates } = body;
+      if (!Array.isArray(updates) || updates.length === 0) {
+        return NextResponse.json({ error: 'Missing or empty updates array' }, { status: 400 });
+      }
+      const results: { jobId: string; success: boolean; error?: string }[] = [];
+      for (const upd of updates) {
+        const { jobId: jid, cronExpr: expr } = upd;
+        if (!jid || !expr) {
+          results.push({ jobId: jid, success: false, error: 'Missing jobId or cronExpr' });
+          continue;
+        }
+        try {
+          const safeId = jid.replace(/[^a-zA-Z0-9_-]/g, '');
+          const safeExpr = expr.replace(/'/g, "'\\''");
+          await execAsync(
+            `openclaw cron edit '${safeId}' --cron '${safeExpr}'`,
+            { timeout: 15000 }
+          );
+          results.push({ jobId: jid, success: true });
+        } catch (err: any) {
+          results.push({ jobId: jid, success: false, error: err.message || 'Failed' });
+        }
+      }
+      
+      // Invalidate cache
+      cachedData = null;
+      cacheTimestamp = 0;
+      
+      return NextResponse.json({ success: true, results });
+    }
+
     return NextResponse.json(
       { error: 'Invalid action' },
       { status: 400 }

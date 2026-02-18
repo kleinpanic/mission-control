@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +49,7 @@ interface HeartbeatDetail {
   workspaceDir: string | null;
 }
 
-export default function HeartbeatDetailPage() {
+function HeartbeatDetailPageInner() {
   const searchParams = useSearchParams();
   const agentId = searchParams.get("agentId");
   const [data, setData] = useState<HeartbeatDetail | null>(null);
@@ -227,5 +227,13 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
       <p className="text-xs text-zinc-500 mb-0.5">{label}</p>
       <p className={cn("text-sm text-zinc-200", mono && "font-mono text-xs")}>{value}</p>
     </div>
+  );
+}
+
+export default function HeartbeatDetailPage() {
+  return (
+    <Suspense fallback={<div className="text-zinc-500 p-8 text-center">Loading...</div>}>
+      <HeartbeatDetailPageInner />
+    </Suspense>
   );
 }
