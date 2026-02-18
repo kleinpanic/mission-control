@@ -8,7 +8,7 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 let cache: { data: any; time: number } | null = null;
-const TTL = 10_000; // 10 seconds
+const TTL = 30_000; // 30 seconds — longer cache, less CLI overhead
 
 // Dedup: only one CLI invocation at a time
 let inflight: Promise<any> | null = null;
@@ -58,4 +58,19 @@ export async function getOpenClawStatus(): Promise<any> {
  */
 export function invalidateStatusCache(): void {
   cache = null;
+}
+
+/**
+ * Returns stale cache immediately (if available), refreshes in background.
+ * Use for initial page loads where stale data > no data.
+ */
+export function getOpenClawStatusStaleWhileRevalidate(): { data: any | null; fresh: Promise<any> } {
+  const stale = cache?.data || null;
+  const fresh = getOpenClawStatus();
+  return { data: stale, fresh };
+}
+
+// Pre-warm on module load (server start)
+if (typeof globalThis !== 'undefined') {
+  getOpenClawStatus().catch(() => {});
 }

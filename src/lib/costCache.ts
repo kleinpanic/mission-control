@@ -26,7 +26,7 @@ export interface ProviderTextSummary {
 }
 
 let textCache: { data: ProviderTextSummary[]; time: number } | null = null;
-const TEXT_TTL = 60_000; // 1 minute
+const TEXT_TTL = 120_000; // 2 minutes
 let textInflight: Promise<ProviderTextSummary[]> | null = null;
 
 /**

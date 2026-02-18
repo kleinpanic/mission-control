@@ -1,13 +1,10 @@
 // Mission Control - Taskmaster Status API
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { readFile } from 'fs/promises';
+import { getOpenClawStatus } from '@/lib/statusCache';
+import { readFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
-
-const execAsync = promisify(exec);
 
 export async function GET() {
   try {
@@ -55,43 +52,41 @@ export async function GET() {
       }
     }
 
-    // Get last triage run from taskmaster agent's daily log
+    // Get OpenClaw status for agent activity and next heartbeat
+    const status = await getOpenClawStatus();
+    
+    // Check if taskmaster is active (updated in last 30 minutes)
+    const taskmasterAgent = status.agents?.agents?.find((a: any) => a.id === 'taskmaster');
+    const lastActiveMs = taskmasterAgent?.lastActiveAgeMs;
+    const taskmasterActive = lastActiveMs !== null && lastActiveMs < 30 * 60 * 1000;
+
+    // Get last triage run from taskmaster agent's memory logs
     let lastTriageRun: string | null = null;
     try {
-      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const logPath = join(
-        homedir(),
-        '.openclaw',
-        'workspace-taskmaster',
-        'memory',
-        `${today}.md`
-      );
-      const logContent = await readFile(logPath, 'utf-8');
+      const memoryDir = join(homedir(), '.openclaw', 'workspace-taskmaster', 'memory');
+      const files = await readdir(memoryDir);
       
-      // Look for timestamp patterns in the log
-      const timestampMatch = logContent.match(/## .* \((\d{2}:\d{2})\)/);
-      if (timestampMatch) {
-        lastTriageRun = `${today}T${timestampMatch[1]}:00`;
+      // Filter for YYYY-MM-DD.md files and sort desc
+      const logFiles = files
+        .filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
+        .sort((a, b) => b.localeCompare(a));
+
+      if (logFiles.length > 0) {
+        const latestFile = logFiles[0];
+        const datePart = latestFile.slice(0, 10);
+        const logContent = await readFile(join(memoryDir, latestFile), 'utf-8');
+        
+        // Look for timestamp patterns: "## Morning Check (08:12)" or "## Triage (14:30)"
+        const timestampMatch = logContent.match(/## .* \((\d{2}:\d{2})\)/);
+        if (timestampMatch) {
+          lastTriageRun = `${datePart}T${timestampMatch[1]}:00`;
+        } else {
+          // Fallback: use file date
+          lastTriageRun = `${datePart}T00:00:00`;
+        }
       }
     } catch (error) {
-      // Log file doesn't exist or can't be read - that's okay
-      console.log('Could not read taskmaster log:', error);
-    }
-
-    // Get taskmaster agent status from sessions
-    let taskmasterActive = false;
-    try {
-      const { stdout } = await execAsync(
-        'openclaw sessions list --agent taskmaster --format json 2>/dev/null || echo "[]"',
-        { timeout: 5000 }
-      );
-      const sessions = JSON.parse(stdout || '[]');
-      taskmasterActive = sessions.length > 0 && sessions.some((s: any) => {
-        const updated = s.updatedAt || 0;
-        return Date.now() - updated < 30 * 60 * 1000; // Active if updated <30min ago
-      });
-    } catch (error) {
-      console.warn('Could not check taskmaster sessions:', error);
+      console.warn('Could not read taskmaster log:', error);
     }
 
     return NextResponse.json({

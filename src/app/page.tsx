@@ -339,8 +339,7 @@ export default function Dashboard() {
   };
 
   const handleHbDoubleClick = (agentId: string) => {
-    // Navigate to heartbeat detail
-    window.open(`/api/heartbeat?agentId=${agentId}`, "_blank");
+    router.push(`/heartbeat?agentId=${agentId}`);
   };
 
   /* ─── Derived data ─── */

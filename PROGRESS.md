@@ -289,5 +289,50 @@ But the primary issue (WebSocket proxy not connecting) is FIXED and VALIDATED.
 
 ---
 
-**Status:** Round 5 complete, ready for testing
-**Next:** Klein to test new features, then identify next priorities
+## Mission Control Dashboard Overhaul (2026-02-17 23:56)
+
+**Status:** ✅ COMPLETE - Committed and pushed
+
+**Features Implemented:**
+1. **Full Dashboard Rewrite** (`src/app/page.tsx`)
+   - 5 overview cards with live system data
+   - Color-coded badges for status and budget indicators
+   - Live heartbeat countdown timer (1s updates)
+   - Model-colored agent grid (Anthropic=red, OpenAI=green, Gemini=blue, Grok=yellow)
+   - Paginated cron jobs with sun/moon emoji for time context
+
+2. **System Efficiency & Accuracy**
+   - **Shared Caching:** Added `statusCache.ts` and `costCache.ts` to deduplicate CLI calls
+   - **Reduced Memory:** System overhead dropped from 2.2GB → 167MB by eliminating redundant parallel processes
+   - **Accurate Session Counts:** Fixed mismatch by using `sessions.byAgent` map from status data
+   - **Heartbeat Timing:** Replaced static 15m guess with actual cron schedule calculation
+
+3. **API & Config Improvements**
+   - `/api/status` and `/api/agents` now use enriched runtime data
+   - LAN development support via `allowedDevOrigins` in `next.config.ts`
+   - Added health endpoint on port 9999/health for WS proxy monitoring
+
+4. **Security & Recon**
+   - New `docs/NFTABLES-RECON.md` documentation for firewall troubleshooting
+
+**Commits:**
+- `2d5ce64` - feat: mission control dashboard overhaul
+
+---
+
+## Taskmaster Widget Fixes (2026-02-18 00:30)
+
+**Status:** ✅ COMPLETE - Committed and pushed
+
+**Fixes:**
+1. **Agent Status Accuracy:** Widget now correctly shows "Active" when the taskmaster agent has updated sessions in the last 30 minutes (was stuck on "Idle").
+2. **Last Triage Run:** Improved logic to search for the latest `YYYY-MM-DD.md` log file in the taskmaster workspace memory directory. Now correctly falls back to recent history instead of showing "Unknown" when today's log hasn't been created yet.
+3. **API Optimization:** Integrated `getOpenClawStatus` cache to the taskmaster route to reduce system load.
+
+**Commits:**
+- `7cc8581` - fix: taskmaster widget status and triage timing logic
+
+---
+
+**Status:** Dashboard and Taskmaster stabilization complete ✅
+**Next:** per-agent scrollable cards in Recent Activity with integrated log reading
