@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { getOpenClawStatus } from "@/lib/statusCache";
 
 const execAsync = promisify(exec);
 
@@ -42,11 +43,12 @@ interface StatusResponse {
   sessions: {
     total: number;
     atCapacity: number;
+    byAgent: Record<string, number>;
     recent: SessionInfo[];
   };
   heartbeat: {
     defaultAgentId: string;
-    nextHeartbeats: { agentId: string; nextIn: string; nextInMs: number }[];
+    nextHeartbeats: { agentId: string; nextIn: string; nextInMs: number; intervalMs?: number }[];
   };
   channels: string[];
 }
@@ -76,67 +78,25 @@ export async function GET() {
       return NextResponse.json(statusCache);
     }
 
-    // Get OpenClaw status via gateway HTTP API (faster + more reliable than CLI)
-    // Falls back to CLI if HTTP fails
+    // Get OpenClaw status via shared cache (deduped CLI call)
     let statusData: any = {};
-    
-    const gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:18789';
-    const httpUrl = gatewayUrl.replace('ws://', 'http://').replace('wss://', 'https://');
-    const token = process.env.OPENCLAW_GATEWAY_TOKEN || '';
-    
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      
-      const res = await fetch(`${httpUrl}/api/v1/invoke`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ method: 'status' }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-      const result = await res.json();
-      statusData = result.result || result || {};
-    } catch (httpError: any) {
-      // HTTP API failed (expected — gateway doesn't have this endpoint), fallback to CLI
-      try {
-        const { stdout: statusJson } = await execAsync(
-          'openclaw status --json 2>/dev/null',
-          { 
-            maxBuffer: 10 * 1024 * 1024, 
-            timeout: 5000,
-            env: {
-              ...process.env,
-              PATH: `/home/broklein/.local/bin:${process.env.PATH || '/usr/local/bin:/usr/bin:/bin'}`,
-              HOME: process.env.HOME || '/home/broklein',
-            }
-          }
-        );
-        
-        // Extract JSON object from output (skip any non-JSON lines from plugin logs)
-        const lines = statusJson.split('\n');
-        const jsonStart = lines.findIndex(line => line.trim().startsWith('{'));
-        if (jsonStart !== -1) {
-          const jsonText = lines.slice(jsonStart).join('\n');
-          statusData = JSON.parse(jsonText);
-        }
-      } catch (cliError: any) {
-        console.error("[status] CLI fallback failed:", cliError.message);
-      }
+      statusData = await getOpenClawStatus();
+    } catch (cliError: any) {
+      console.error("[status] Failed to get OpenClaw status:", cliError.message);
     }
 
     // Build agents info
     const heartbeatAgents = statusData.heartbeat?.agents || [];
     const recentSessions = statusData.sessions?.recent || [];
 
-    // Group sessions by agent
+    // Use byAgent for accurate session counts, recent for activity data
+    const byAgentMap: Record<string, { count: number; recent: any[] }> = {};
+    for (const entry of (statusData.sessions?.byAgent || [])) {
+      byAgentMap[entry.agentId] = { count: entry.count || 0, recent: entry.recent || [] };
+    }
+
+    // Group recent sessions by agent (for activity data)
     const sessionsByAgent: Record<string, SessionInfo[]> = {};
     for (const session of recentSessions) {
       const agentId = session.agentId;
@@ -179,7 +139,7 @@ export async function GET() {
           ? new Date(now - (mostRecentSession.age || 0)).toISOString()
           : null,
         lastActivityAge: mostRecentSession ? formatAge(mostRecentSession.age || 0) : "never",
-        activeSessions: agentSessions.length,
+        activeSessions: byAgentMap[hb.agentId]?.count || agentSessions.length,
         totalTokensUsed: agentSessions.reduce(
           (sum: number, s: any) => sum + (s.totalTokens || 0),
           0
@@ -188,21 +148,40 @@ export async function GET() {
       };
     });
 
-    // Calculate next heartbeats
+    // Calculate next heartbeats using cron data for accurate timing
+    let cronJobs: any[] = [];
+    try {
+      const cronResp = await fetch(`http://127.0.0.1:${process.env.MISSION_CONTROL_PORT || 3333}/api/cron`, {
+        signal: AbortSignal.timeout(3000),
+      }).then(r => r.ok ? r.json() : null).catch(() => null);
+      cronJobs = cronResp?.jobs || [];
+    } catch { /* ignore */ }
+
     const nextHeartbeats = heartbeatAgents
-      .filter((hb: any) => hb.enabled)
+      .filter((hb: any) => hb.enabled && hb.everyMs > 0)
       .map((hb: any) => {
-        // Estimate next heartbeat based on interval
-        // This is approximate - would need to track actual last heartbeat time
         const intervalMs = hb.everyMs;
-        const agentSessions = sessionsByAgent[hb.agentId] || [];
-        const lastActivity = agentSessions[0]?.age || intervalMs;
-        const nextInMs = Math.max(0, intervalMs - (lastActivity % intervalMs));
+        // Check cron for accurate next-run time
+        const cronJob = cronJobs.find((j: any) => 
+          j.name?.toLowerCase().includes(hb.agentId) && 
+          j.name?.toLowerCase().includes('heartbeat')
+        );
+        
+        let nextInMs: number;
+        if (cronJob?.nextRun) {
+          nextInMs = Math.max(0, new Date(cronJob.nextRun).getTime() - now);
+        } else {
+          // Fallback: estimate from session activity age
+          const agentSessions = sessionsByAgent[hb.agentId] || [];
+          const lastActivity = agentSessions[0]?.age || intervalMs;
+          nextInMs = Math.max(0, intervalMs - (lastActivity % intervalMs));
+        }
 
         return {
           agentId: hb.agentId,
           nextIn: formatDuration(nextInMs),
           nextInMs,
+          intervalMs,
         };
       })
       .sort((a: any, b: any) => a.nextInMs - b.nextInMs);
@@ -219,6 +198,9 @@ export async function GET() {
       sessions: {
         total: statusData.sessions?.count || 0,
         atCapacity,
+        byAgent: Object.fromEntries(
+          Object.entries(byAgentMap).map(([k, v]) => [k, (v as any).count])
+        ),
         recent: recentSessions.slice(0, 10).map((s: any) => ({
           agentId: s.agentId,
           key: s.key,

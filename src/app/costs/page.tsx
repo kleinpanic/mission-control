@@ -177,7 +177,7 @@ export default function CostsPage() {
             variant="secondary"
             className="mt-4"
             onClick={fetchCosts}
-            disabled={!connected}
+            disabled={loading}
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Retry

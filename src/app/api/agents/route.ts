@@ -1,12 +1,9 @@
 // Mission Control - Agents API
 // Provides agent data via OpenClaw CLI (bypasses WebSocket pairing requirement)
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
-
-const execAsync = promisify(exec);
+import { getOpenClawStatus } from "@/lib/statusCache";
 
 // Cache for 30 seconds (agent data doesn't change often)
 let agentsCache: any = null;
@@ -25,23 +22,17 @@ export async function GET() {
     const configRaw = await fs.readFile(configPath, "utf-8");
     const config = JSON.parse(configRaw);
     
-    // Get status to extract session/activity data
-    const { stdout: rawOutput } = await execAsync(
-      'openclaw status --json 2>/dev/null | grep -v "^\\["',
-      { maxBuffer: 10 * 1024 * 1024 }
-    );
+    // Get status to extract session/activity data (shared cache — deduped with /api/status)
+    const status = await getOpenClawStatus();
     
-    const status = JSON.parse(rawOutput.trim());
-    
-    // Build agent session map from status.sessions.recent
-    const sessionsByAgent: Record<string, any[]> = {};
-    (status.sessions?.recent || []).forEach((sess: any) => {
-      const agentId = sess.agentId;
-      if (!sessionsByAgent[agentId]) {
-        sessionsByAgent[agentId] = [];
-      }
-      sessionsByAgent[agentId].push(sess);
-    });
+    // Build agent session map from status.sessions.byAgent (complete, not just recent 10)
+    const sessionsByAgent: Record<string, { count: number; recent: any[] }> = {};
+    for (const entry of (status.sessions?.byAgent || [])) {
+      sessionsByAgent[entry.agentId] = {
+        count: entry.count || 0,
+        recent: entry.recent || [],
+      };
+    }
     
     // Build heartbeat config map
     const heartbeatByAgent: Record<string, any> = {};
@@ -83,12 +74,13 @@ export async function GET() {
     // Combine agent config with runtime data
     const agentList = config.agents?.list || [];
     const agents = agentList.map((agent: any) => {
-      const sessions = sessionsByAgent[agent.id] || [];
+      const agentSessions = sessionsByAgent[agent.id] || { count: 0, recent: [] };
+      const sessions = agentSessions.recent;
       const heartbeat = heartbeatByAgent[agent.id];
       
       // Get most recent session for last activity
       const mostRecent = sessions.length > 0 
-        ? sessions.reduce((a, b) => a.updatedAt > b.updatedAt ? a : b)
+        ? sessions.reduce((a: any, b: any) => (a.updatedAt || 0) > (b.updatedAt || 0) ? a : b)
         : null;
       
       // Calculate status based on sessions and heartbeat
@@ -120,8 +112,10 @@ export async function GET() {
         model: modelStr,
         authMode, // "oauth" | "api" | "token" | "local" | "unknown"
         fallbacks,
-        sessions: sessions.length,
-        heartbeatInterval: heartbeat?.every || "unknown",
+        sessions: agentSessions.count,
+        heartbeatInterval: heartbeat?.everyMs === null || heartbeat?.everyMs === 0 
+          ? "disabled" 
+          : (heartbeat?.every || "unknown"),
         lastActivity: mostRecent ? new Date(mostRecent.updatedAt).toISOString() : null,
         contextUsage: mostRecent?.percentUsed || 0,
         totalTokens: sessions.reduce((sum: number, s: any) => sum + (s.totalTokens || 0), 0),
