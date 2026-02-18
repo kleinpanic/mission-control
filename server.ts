@@ -452,6 +452,19 @@ app.prepare().then(() => {
   // Standalone WebSocket proxy server on separate port
   // This avoids Next.js HTTP/WebSocket conflicts
   const wsProxyServer = createServer((req, res) => {
+    // Health endpoint for remote connectivity diagnostics
+    if (req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({
+        ok: true,
+        clients: connectedClients.size,
+        gatewayUrl: GATEWAY_URL,
+        hasDeviceIdentity: !!deviceIdentity,
+        hasDeviceAuthToken: !!deviceAuthToken,
+        uptime: process.uptime(),
+      }));
+      return;
+    }
     res.writeHead(200);
     res.end("WebSocket proxy server");
   });
@@ -459,6 +472,9 @@ app.prepare().then(() => {
   const wss = new WebSocketServer({ server: wsProxyServer });
 
   wss.on("connection", (clientWs, req) => {
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const origin = req.headers.origin || 'none';
+    console.log(`[WS Proxy] New connection from ${clientIp} (origin: ${origin})`);
     handleWsProxyConnection(clientWs, req);
   });
 

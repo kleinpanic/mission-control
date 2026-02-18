@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { getCostJsonProviders } from "@/lib/costCache";
 
 const execAsync = promisify(exec);
 
@@ -46,17 +47,8 @@ export async function GET() {
       return NextResponse.json(cache);
     }
 
-    // Get cost data from codexbar (all providers)
-    const { stdout: rawCostData } = await execAsync(
-      'codexbar cost --provider all --format json 2>/dev/null || echo "[]"'
-    );
-
-    let providers: any[] = [];
-    try {
-      providers = JSON.parse(rawCostData.trim() || "[]");
-    } catch {
-      providers = [];
-    }
+    // Get cost data from shared cache (deduped with /api/costs)
+    const providers = await getCostJsonProviders();
 
     // Aggregate by day from codexbar data
     const dailyMap: Record<string, number> = {};
@@ -150,7 +142,7 @@ export async function GET() {
     try {
       const { stdout: sessionData } = await execAsync(
         'openclaw sessions --json 2>/dev/null || echo "{}"',
-        { timeout: 10000 }
+        { timeout: 10000, env: { ...process.env, PATH: `/home/broklein/.local/bin:${process.env.PATH}`, HOME: '/home/broklein' } }
       );
       // Skip plugin log lines, find JSON
       const sessionLines = sessionData.split('\n');

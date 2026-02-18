@@ -33,8 +33,8 @@ export default function AgentsPage() {
   const [loading, setLoading] = useState(true);
   const { connected, request, subscribe } = useGateway();
 
-  const fetchAgents = useCallback(async () => {
-    setLoading(true);
+  const fetchAgents = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     try {
       // Use HTTP APIs exclusively — avoids WS operator.read scope errors
       const [agentsResult, statusResult] = await Promise.all([
@@ -147,29 +147,28 @@ export default function AgentsPage() {
     } catch (error) {
       console.error("Failed to fetch agents:", error);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
-  }, [connected, request]);
+  }, []); // HTTP-only — no WS dependency
 
   useEffect(() => {
-    // Fetch on mount and when connection state changes
     fetchAgents();
-  }, [connected, fetchAgents]);
+  }, [fetchAgents]);
 
   // Subscribe to real-time updates
   useEffect(() => {
     if (!connected) return;
 
     const unsubAgent = subscribe("agent", () => {
-      fetchAgents();
+      fetchAgents(true); // background — no loading skeleton
     });
 
     const unsubSession = subscribe("session", () => {
-      fetchAgents();
+      fetchAgents(true);
     });
 
-    // Periodic refresh
-    const interval = setInterval(fetchAgents, 30000);
+    // Periodic background refresh (no loading skeleton)
+    const interval = setInterval(() => fetchAgents(true), 30000);
 
     return () => {
       unsubAgent();
