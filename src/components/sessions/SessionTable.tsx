@@ -118,6 +118,7 @@ export function SessionTable({
   onRefresh,
 }: SessionTableProps) {
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [hideSystem, setHideSystem] = useState(true);
   const { connected, request } = useGateway();
 
   const handleCompact = async (e: React.MouseEvent, session: Session) => {
@@ -186,7 +187,13 @@ export function SessionTable({
     }
   };
 
-  const atCapacitySessions = sessions.filter(s => 
+  const SYSTEM_AGENTS = new Set(["system"]);
+  const filteredSessions = hideSystem
+    ? sessions.filter(s => !SYSTEM_AGENTS.has(getAgentFromKey(s.key)))
+    : sessions;
+  const systemCount = sessions.length - filteredSessions.length;
+
+  const atCapacitySessions = filteredSessions.filter(s => 
     s.tokens && Math.round((s.tokens.used / s.tokens.limit) * 100) >= 95
   ).length;
 
@@ -227,7 +234,7 @@ export function SessionTable({
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-lg text-zinc-100">
-              Active Sessions ({sessions.length})
+              Active Sessions ({filteredSessions.length})
             </CardTitle>
             {atCapacitySessions > 0 && (
               <CardDescription className="flex items-center gap-1 text-amber-400 mt-1">
@@ -236,15 +243,27 @@ export function SessionTable({
               </CardDescription>
             )}
           </div>
-          {!connected && (
-            <Badge variant="outline" className="text-yellow-400 border-yellow-400/50">
-              Offline
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {systemCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn("text-xs h-7", hideSystem ? "border-zinc-700 text-zinc-400" : "border-zinc-600 text-zinc-200")}
+                onClick={() => setHideSystem(!hideSystem)}
+              >
+                {hideSystem ? `Show ${systemCount} system` : "Hide system"}
+              </Button>
+            )}
+            {!connected && (
+              <Badge variant="outline" className="text-yellow-400 border-yellow-400/50">
+                Offline
+              </Badge>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        {sessions.map((session) => {
+        {filteredSessions.map((session) => {
           const agent = getAgentFromKey(session.key);
           const channel = getChannelFromKey(session.key);
           const contextPercent = session.tokens 
