@@ -39,8 +39,15 @@ interface DebugInfo {
   };
 }
 
+let debugCache: { data: any; time: number } | null = null;
+const DEBUG_TTL = 60_000;
+
 export async function GET() {
   try {
+    const now = Date.now();
+    if (debugCache && now - debugCache.time < DEBUG_TTL) {
+      return NextResponse.json(debugCache.data);
+    }
     const debugInfo: DebugInfo = {
       system: {
         platform: os.platform(),
@@ -91,6 +98,7 @@ export async function GET() {
       // Version unavailable
     }
 
+    debugCache = { data: debugInfo, time: Date.now() };
     return NextResponse.json(debugInfo);
   } catch (error) {
     console.error('Debug info API error:', error);

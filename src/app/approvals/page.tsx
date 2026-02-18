@@ -208,12 +208,51 @@ export default function ApprovalsPage() {
         <TabsContent value={activeTab} className="mt-6 space-y-4">
           {filteredApprovals.length === 0 ? (
             <Card className="bg-zinc-900 border-zinc-800">
-              <CardContent className="pt-8 pb-8 text-center">
-                <p className="text-zinc-400">
-                  {activeTab === "pending"
-                    ? "No pending approvals"
-                    : `No ${activeTab} approvals`}
-                </p>
+              <CardContent className="pt-8 pb-8">
+                {stats?.total === 0 ? (
+                  <div className="max-w-md mx-auto text-center space-y-4">
+                    <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mx-auto">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-zinc-100 mb-1">No Approval Requests Yet</h3>
+                      <p className="text-sm text-zinc-400">
+                        Agents submit approval requests when performing high-impact actions like deployments,
+                        config changes, or expensive operations during autonomous mode.
+                      </p>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700 text-left space-y-2">
+                      <h4 className="text-xs font-medium text-zinc-300 uppercase">How Approvals Work</h4>
+                      <ul className="text-xs text-zinc-400 space-y-1.5">
+                        <li className="flex items-start gap-2">
+                          <span className="text-emerald-400 mt-0.5">1.</span>
+                          <span>An agent encounters a high-impact action during autonomous work</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-emerald-400 mt-0.5">2.</span>
+                          <span>It submits an approval request with context and risk assessment</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-emerald-400 mt-0.5">3.</span>
+                          <span>You review, approve, or reject from this dashboard</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-emerald-400 mt-0.5">4.</span>
+                          <span>The agent proceeds (or halts) based on your decision</span>
+                        </li>
+                      </ul>
+                    </div>
+                    <p className="text-[11px] text-zinc-500">
+                      Configure approval requirements in each agent&apos;s AGENTS.md file under the autonomous mode section.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-zinc-400 text-center">
+                    {activeTab === "pending"
+                      ? "No pending approvals — all caught up!"
+                      : `No ${activeTab} approvals`}
+                  </p>
+                )}
               </CardContent>
             </Card>
           ) : (

@@ -62,12 +62,11 @@ export default function AgentsPage() {
           });
         }
 
-        // Build next heartbeat map from status.heartbeat.next
+        // Build next heartbeat map from status.heartbeat.nextHeartbeats
         const nextHeartbeatByAgent = new Map<string, any>();
-        if (statusResult?.heartbeat?.next) {
-          for (const hb of statusResult.heartbeat.next) {
-            nextHeartbeatByAgent.set(hb.agentId, hb);
-          }
+        const nextHbs = statusResult?.heartbeat?.nextHeartbeats || statusResult?.heartbeat?.next || [];
+        for (const hb of nextHbs) {
+          nextHeartbeatByAgent.set(hb.agentId, hb);
         }
         
         // Use ONLY what the gateway returns — no hardcoded defaults
@@ -125,6 +124,17 @@ export default function AgentsPage() {
             heartbeatNext = heartbeatInfo.every;
           }
           
+          // Heartbeat interval — prefer agent API field, fall back to heartbeat config
+          const agentHbInterval = agent.heartbeatInterval || null;
+          const everyMs = heartbeatInfo?.everyMs || 0;
+          const heartbeatInterval = agentHbInterval
+            ? agentHbInterval
+            : everyMs > 0
+              ? everyMs >= 3600000 ? `${Math.round(everyMs / 3600000)}h`
+              : everyMs >= 60000 ? `${Math.round(everyMs / 60000)}m`
+              : `${Math.round(everyMs / 1000)}s`
+              : heartbeatInfo?.enabled === false ? "disabled" : "disabled";
+
           return {
             id: agent.id,
             name: agent.name || agent.id,
@@ -134,6 +144,7 @@ export default function AgentsPage() {
             lastActivity,
             activeSession: mostRecentSession?.key || null,
             heartbeatNext,
+            heartbeatInterval: heartbeatInterval || undefined,
             heartbeatOverdue: false,
             activeSessions,
             tokenLimited: hasTokenLimited,

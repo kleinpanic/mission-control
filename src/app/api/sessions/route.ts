@@ -157,8 +157,22 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      case 'delete': {
+        const key = sessionKey || body.key;
+        if (!key) return NextResponse.json({ error: 'Missing session key' }, { status: 400 });
+        const { stdout: delOut } = await execAsync(
+          `openclaw sessions delete "${key}" --json 2>&1 || echo '{"error":"delete_failed"}'`,
+          { timeout: 15000 }
+        );
+        try {
+          const res = JSON.parse(delOut);
+          return NextResponse.json({ success: !res.error, result: res });
+        } catch {
+          return NextResponse.json({ success: true, output: delOut });
+        }
+      }
+
       case 'reset': {
-        // Same as prune but more explicit
         const { stdout } = await execAsync(
           `openclaw sessions reset --agent "${agentId || 'main'}" --session "${sessionKey}" 2>&1`,
           { timeout: 30000 }

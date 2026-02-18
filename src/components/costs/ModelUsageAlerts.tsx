@@ -7,8 +7,13 @@ import { AlertTriangle, TrendingUp, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ModelUsageAlertsProps {
-  byModel: Record<string, number>;
+  byModel: Record<string, number | { cost: number; [key: string]: any }>;
   totalMonthly: number;
+}
+
+/** Extract numeric cost from byModel value (handles both old number format and new object format) */
+function extractCost(val: number | { cost: number; [key: string]: any }): number {
+  return typeof val === 'number' ? val : val.cost;
 }
 
 interface ModelAlert {
@@ -23,11 +28,12 @@ export function ModelUsageAlerts({ byModel, totalMonthly }: ModelUsageAlertsProp
     if (!byModel || Object.keys(byModel).length === 0) return [];
 
     const result: ModelAlert[] = [];
-    const total = Object.values(byModel).reduce((sum, v) => sum + v, 0);
+    const total: number = Object.values(byModel).reduce<number>((sum, v) => sum + extractCost(v), 0);
 
-    for (const [model, cost] of Object.entries(byModel)) {
+    for (const [model, val] of Object.entries(byModel)) {
+      const cost: number = extractCost(val);
       if (total <= 0) continue;
-      const pct = (cost / total) * 100;
+      const pct: number = (cost / total) * 100;
 
       // Flag models consuming disproportionate share
       if (pct >= 60) {
@@ -38,7 +44,8 @@ export function ModelUsageAlerts({ byModel, totalMonthly }: ModelUsageAlertsProp
     }
 
     // Also flag if paid fallback (gpt-5.2 / openai) is being used
-    for (const [model, cost] of Object.entries(byModel)) {
+    for (const [model, val] of Object.entries(byModel)) {
+      const cost: number = extractCost(val);
       if (
         cost > 0 &&
         (model.includes("gpt-5") || model.includes("openai")) &&

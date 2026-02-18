@@ -43,7 +43,7 @@ interface StatusResponse {
   sessions: {
     total: number;
     atCapacity: number;
-    byAgent: Record<string, number>;
+    byAgent: any[];
     recent: SessionInfo[];
   };
   heartbeat: {
@@ -198,9 +198,17 @@ export async function GET() {
       sessions: {
         total: statusData.sessions?.count || 0,
         atCapacity,
-        byAgent: Object.fromEntries(
-          Object.entries(byAgentMap).map(([k, v]) => [k, (v as any).count])
-        ),
+        byAgent: Object.entries(byAgentMap).map(([agentId, data]) => ({
+          agentId,
+          count: (data as any).count,
+          recent: ((data as any).recent || []).slice(0, 10).map((s: any) => ({
+            key: s.key, agentId: s.agentId, kind: s.kind, model: s.model,
+            percentUsed: s.percentUsed, totalTokens: s.totalTokens,
+            remainingTokens: s.remainingTokens, contextTokens: s.contextTokens,
+            updatedAt: s.updatedAt, age: s.age, abortedLastRun: s.abortedLastRun,
+            systemSent: s.systemSent,
+          })),
+        })),
         recent: recentSessions.slice(0, 10).map((s: any) => ({
           agentId: s.agentId,
           key: s.key,

@@ -295,7 +295,14 @@ export function AgentCard({ agent }: AgentCardProps) {
                 agent.heartbeatOverdue && "text-yellow-500"
               )}
             >
-              ♡ {formatHeartbeat(agent.heartbeatNext, agent.heartbeatOverdue)}
+              ♡ {agent.heartbeatNext
+                ? formatHeartbeat(agent.heartbeatNext, agent.heartbeatOverdue)
+                : agent.heartbeatInterval === "disabled" || agent.heartbeatInterval === "0"
+                  ? "Disabled"
+                  : agent.heartbeatInterval
+                    ? `every ${agent.heartbeatInterval}`
+                    : "N/A"
+              }
             </span>
           </div>
         </div>

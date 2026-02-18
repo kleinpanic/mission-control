@@ -19,6 +19,11 @@ function getModelColor(model: string | null | undefined): string {
   return "bg-purple-500/20 text-purple-400 border-purple-500/30";
 }
 
+function shortModel(model: string | null | undefined): string {
+  if (!model) return "default";
+  return model.replace(/^(anthropic|openai|google|google-gemini-cli)\//,"").replace(/-preview$/,"").slice(0,25);
+}
+
 function getModelDot(model: string | null | undefined): string {
   if (!model) return "bg-zinc-500";
   const m = model.toLowerCase();
@@ -37,7 +42,8 @@ interface HeartbeatDetail {
   model: string | null;
   agentName: string;
   sessionCount: number;
-  prompt: string | null;
+  tasks: string[];
+  rawPrompt: string | null;
   lastUpdatedAt: number | null;
   lastActiveAge: string | null;
   workspaceDir: string | null;
@@ -117,7 +123,7 @@ export default function HeartbeatDetailPage() {
               <Activity className="w-6 h-6" />
               <span>{data.agentName}</span>
               <Badge className={cn("text-xs", getModelColor(data.model))}>
-                {data.model || "default model"}
+                {shortModel(data.model)}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -137,13 +143,31 @@ export default function HeartbeatDetailPage() {
               )}
             </div>
 
-            {data.prompt && (
+            {/* Task summary */}
+            {data.tasks && data.tasks.length > 0 && (
               <div className="mt-4">
-                <h4 className="text-sm font-medium text-zinc-400 mb-2">Heartbeat Prompt</h4>
-                <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700">
-                  <pre className="text-sm text-zinc-300 whitespace-pre-wrap font-mono">{data.prompt}</pre>
+                <h4 className="text-sm font-medium text-zinc-400 mb-2">What This Heartbeat Does</h4>
+                <div className="space-y-1.5">
+                  {data.tasks.map((task, i) => (
+                    <div key={i} className="flex items-start gap-2 bg-zinc-800/50 rounded px-3 py-2 border border-zinc-700">
+                      <span className="text-emerald-400 mt-0.5 text-sm">•</span>
+                      <span className="text-sm text-zinc-200">{task}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
+            )}
+
+            {/* Collapsible raw prompt */}
+            {data.rawPrompt && (
+              <details className="mt-4">
+                <summary className="text-sm font-medium text-zinc-500 cursor-pointer hover:text-zinc-400 transition-colors">
+                  View raw HEARTBEAT.md
+                </summary>
+                <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700 mt-2 max-h-96 overflow-y-auto">
+                  <pre className="text-xs text-zinc-400 whitespace-pre-wrap font-mono">{data.rawPrompt}</pre>
+                </div>
+              </details>
             )}
           </CardContent>
         </Card>
@@ -173,7 +197,7 @@ export default function HeartbeatDetailPage() {
                     <span className="font-semibold text-zinc-100">{hb.agentName}</span>
                   </div>
                   <Badge className={cn("text-[10px]", getModelColor(hb.model))}>
-                    {hb.model || "default"}
+                    {shortModel(hb.model)}
                   </Badge>
                 </div>
                 <div className="flex justify-between text-sm">

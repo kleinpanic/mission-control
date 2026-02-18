@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { getCostJsonProviders } from "@/lib/costCache";
+import { calculateTokenCost } from "@/lib/providerCosts";
 
 const execAsync = promisify(exec);
 
@@ -157,25 +158,18 @@ export async function GET() {
         const sessionJson = JSON.parse(sessionLines.slice(sessionJsonStart).join('\n'));
         const sessions = sessionJson.sessions || [];
         
-        // Rough cost estimation per model ($/1M tokens, blended input/output)
-        const modelCostPer1M: Record<string, number> = {
-          'claude-sonnet-4-5': 9.0,
-          'claude-opus-4-5': 45.0,
-          'claude-opus-4-6': 45.0,
-          'gpt-5.2': 15.0,
-          'gemini-3-flash-preview': 0.5,
-          'gemini-3-pro-preview': 5.0,
-        };
-        
-        for (const session of sessions) {
+          for (const session of sessions) {
           const agentId = session.key?.split(':')[1] || 'unknown';
-          const totalTokens = (session.inputTokens || 0) + (session.outputTokens || 0);
+          const inputTokens = session.inputTokens || 0;
+          const outputTokens = session.outputTokens || 0;
+          const totalTokens = session.totalTokens || (inputTokens + outputTokens);
           const model = session.model || 'claude-sonnet-4-5';
-          
-          // Find matching cost rate
-          const costRate = Object.entries(modelCostPer1M).find(([k]) => model.includes(k))?.[1] || 5.0;
-          const cost = (totalTokens / 1_000_000) * costRate;
-          
+
+          // Use real per-model pricing from providerCosts.ts
+          const estInput = inputTokens > 0 ? inputTokens : Math.round(totalTokens * 0.85);
+          const estOutput = outputTokens > 0 ? outputTokens : Math.round(totalTokens * 0.15);
+          const { cost } = calculateTokenCost(model, estInput, estOutput);
+
           agentMap[agentId] = (agentMap[agentId] || 0) + cost;
         }
         
@@ -192,7 +186,35 @@ export async function GET() {
     const dailyDetails = Object.values(dailyDetailsMap)
       .sort((a, b) => b.date.localeCompare(a.date));
 
-    const response: CostHistoryResponse = {
+    // Build daily-by-provider for multi-line charts
+    const dailyByProvider: Record<string, { date: string; cost: number }[]> = {};
+    for (const provider of providers) {
+      const name = provider.provider || "unknown";
+      if (!dailyByProvider[name]) dailyByProvider[name] = [];
+      for (const day of provider.daily || []) {
+        const cost = day.totalCost ?? (day.modelBreakdowns || []).reduce((s: number, m: any) => s + (m.cost || 0), 0);
+        if (cost > 0) dailyByProvider[name].push({ date: day.date, cost: Math.round(cost * 100) / 100 });
+      }
+      dailyByProvider[name].sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    // Build daily-by-model for multi-line charts
+    const dailyByModel: Record<string, { date: string; cost: number }[]> = {};
+    for (const detail of Object.values(dailyDetailsMap)) {
+      for (const mb of detail.modelBreakdowns) {
+        if (mb.cost <= 0) continue;
+        if (!dailyByModel[mb.modelName]) dailyByModel[mb.modelName] = [];
+        // Merge same date+model entries
+        const existing = dailyByModel[mb.modelName].find(e => e.date === detail.date);
+        if (existing) existing.cost += mb.cost;
+        else dailyByModel[mb.modelName].push({ date: detail.date, cost: Math.round(mb.cost * 100) / 100 });
+      }
+    }
+    for (const key of Object.keys(dailyByModel)) {
+      dailyByModel[key].sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    const response: CostHistoryResponse & { dailyByProvider: any; dailyByModel: any } = {
       daily,
       dailyDetails,
       weekly,
@@ -200,6 +222,8 @@ export async function GET() {
       byAgent: agentMap,
       byModel: modelMap,
       byProvider: providerMap,
+      dailyByProvider,
+      dailyByModel,
     };
 
     // Update cache

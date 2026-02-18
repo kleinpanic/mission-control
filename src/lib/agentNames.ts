@@ -8,6 +8,7 @@ export const AGENT_NAMES: Record<string, string> = {
   school: "School",
   ops: "Ops",
   research: "Research",
+  immune: "Immune",
   taskmaster: "Taskmaster",
   meta: "Meta",
   recovery: "Recovery",

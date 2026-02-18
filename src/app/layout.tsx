@@ -6,6 +6,7 @@ import { Header } from '@/components/dashboard/Header';
 import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { GatewayProvider } from '@/providers/GatewayProvider';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -32,16 +33,18 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ThemeProvider>
           <GatewayProvider>
-            <div className="flex h-screen bg-background">
-              <Sidebar />
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <Header />
-                <main className="flex-1 overflow-y-auto p-3 md:p-6">
-                  {children}
-                </main>
+            <TooltipProvider delayDuration={300}>
+              <div className="flex h-screen bg-background">
+                <Sidebar />
+                <div className="flex flex-col flex-1 overflow-hidden">
+                  <Header />
+                  <main className="flex-1 overflow-y-auto p-3 md:p-6">
+                    {children}
+                  </main>
+                </div>
               </div>
-            </div>
-            <Toaster />
+              <Toaster />
+            </TooltipProvider>
           </GatewayProvider>
         </ThemeProvider>
       </body>
